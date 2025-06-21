@@ -19,26 +19,29 @@ async def root():
 # --- Pyrogram bot ---
 bot = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-@bot.on_message(filters.command("link") & filters.private)
+@bot.on_message(filters.command("link"))
 async def link_handler(client, message):
     if len(message.command) < 2:
         await message.reply("❌ Usage: /link <url>")
         return
 
     url = message.command[1]
-    await message.reply("🔄 Processing your link...")
+    status_msg = await message.reply("🔄 Starting processing...")
 
     try:
         from uc import get_real_download_links
-        links = get_real_download_links(url)
+
+        await status_msg.edit_text("⚙️ Launching browser & loading page...")
+        links = get_real_download_links(url, status_msg)
 
         if links:
             reply = "\n".join(f"• {link}" for link in links)
-            await message.reply(f"🎯 Final Video Link(s):\n{reply}")
+            await status_msg.edit_text(f"🎯 Final Video Link(s):\n{reply}")
         else:
-            await message.reply("⚠️ No links found.")
+            await status_msg.edit_text("⚠️ No valid links found.")
     except Exception as e:
-        await message.reply(f"❌ Error: {e}")
+        await status_msg.edit_text(f"❌ Error occurred:\n`{e}`")
+
 
 # --- Start FastAPI in background ---
 def run_fastapi():

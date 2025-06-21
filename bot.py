@@ -1,13 +1,16 @@
 import os
 import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
-from uc import get_real_download_links  # ✅ FIXED: match uc.py
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
+from uc import get_real_download_links  # correct import from uc.py
 
 logging.basicConfig(level=logging.INFO)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs"
 
 async def link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -18,7 +21,7 @@ async def link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔄 Processing your link...")
 
     try:
-        links = get_real_download_links(url)  # ✅ FIXED: correct function call
+        links = get_real_download_links(url)
         if links:
             reply = "\n".join(f"• {link}" for link in links)
             await update.message.reply_text(f"🎯 Final Video Link(s):\n{reply}")

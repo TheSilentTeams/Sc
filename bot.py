@@ -110,9 +110,14 @@ async def link_handler(client, message):
 
     loop = asyncio.get_running_loop()
 
+    # Wrap coroutine manually to ensure it's passed correctly
     def update_callback(text: str):
-        # Schedule update safely from thread
-        asyncio.run_coroutine_threadsafe(status_msg.edit_text(text), loop)
+        async def coro():
+            try:
+                await status_msg.edit_text(text)
+            except Exception as e:
+                logger.warning(f"Failed to update message text: {e}")
+        asyncio.run_coroutine_threadsafe(coro(), loop)
 
     try:
         links = await asyncio.to_thread(get_real_download_links, url, update_callback)
@@ -129,6 +134,7 @@ async def link_handler(client, message):
         await status_msg.edit_text(error_text)
         logger.error(error_text)
         logger.error(traceback.format_exc())
+
 
 # --- Run FastAPI in background ---
 def run_fastapi():

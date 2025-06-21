@@ -2,6 +2,8 @@ import os
 import asyncio
 from threading import Thread
 from typing import Callable
+import logging
+import traceback
 
 from fastapi import FastAPI
 import uvicorn
@@ -13,10 +15,21 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+# --- Logging setup ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("bot.log", mode="a", encoding="utf-8")
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # --- Configuration ---
 API_ID = int(os.environ.get("API_ID", "25833520"))
 API_HASH = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "7422084781:AAEyqYJBAepuCeXgnZcNVxa_Z7aMDcIiK1s")
 
 # --- Web App using FastAPI ---
 web_app = FastAPI()
@@ -32,6 +45,7 @@ def get_real_download_links(url: str, update_callback: Callable[[str], None] = N
     def send_update(text: str):
         if update_callback:
             update_callback(text)
+        logger.info(text)
 
     options = Options()
     options.add_argument("--headless=new")
@@ -43,6 +57,7 @@ def get_real_download_links(url: str, update_callback: Callable[[str], None] = N
     options.add_argument("--disable-blink-features=AutomationControlled")
 
     driver = webdriver.Chrome(options=options)
+    logger.info(f"Selenium browser launched for: {url}")
 
     try:
         send_update("🌐 Opening URL...")
@@ -73,11 +88,15 @@ def get_real_download_links(url: str, update_callback: Callable[[str], None] = N
         return download_links
 
     except Exception as e:
-        send_update(f"❌ Failed: {e}")
+        error_msg = f"❌ Error: {e}"
+        send_update(error_msg)
+        logger.error(error_msg)
+        logger.error(traceback.format_exc())
         return []
 
     finally:
         driver.quit()
+        logger.info("Selenium browser closed.")
 
 @bot.on_message(filters.command("link"))
 async def link_handler(client, message):
@@ -87,24 +106,29 @@ async def link_handler(client, message):
 
     url = message.command[1]
     status_msg = await message.reply("🔄 Starting processing...")
+    logger.info(f"Received /link command: {url} from user {message.from_user.id}")
 
     loop = asyncio.get_running_loop()
 
     def update_callback(text: str):
-        # Schedule the coroutine from another thread
+        # Schedule update safely from thread
         asyncio.run_coroutine_threadsafe(status_msg.edit_text(text), loop)
 
     try:
-        # Run blocking Selenium code in a thread
         links = await asyncio.to_thread(get_real_download_links, url, update_callback)
 
         if links:
             reply = "\n".join(f"• {link}" for link in links)
             await status_msg.edit_text(f"🎯 Final Video Link(s):\n{reply}")
+            logger.info(f"✅ Delivered {len(links)} links to user.")
         else:
             await status_msg.edit_text("⚠️ No valid links found.")
+            logger.warning("⚠️ No links found.")
     except Exception as e:
-        await status_msg.edit_text(f"❌ Error occurred:\n`{e}`")
+        error_text = f"❌ Error occurred:\n`{e}`"
+        await status_msg.edit_text(error_text)
+        logger.error(error_text)
+        logger.error(traceback.format_exc())
 
 # --- Run FastAPI in background ---
 def run_fastapi():
@@ -115,4 +139,5 @@ def run_fastapi():
 # --- Main entry point ---
 if __name__ == "__main__":
     Thread(target=run_fastapi).start()
+    logger.info("🚀 FastAPI server started on port 8000")
     bot.run()

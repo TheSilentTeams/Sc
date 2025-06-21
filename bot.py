@@ -32,7 +32,7 @@ async def link_handler(client, message):
         from uc import get_real_download_links
 
         await status_msg.edit_text("⚙️ Launching browser & loading page...")
-        links = get_real_download_links(url, status_msg)
+        links = get_real_download_links(url)
 
         if links:
             reply = "\n".join(f"• {link}" for link in links)

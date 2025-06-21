@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 API_ID = int(os.environ.get("API_ID", "25833520"))
 API_HASH = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "7112230953:AAF-3O63cMogIRIPv7AgGZQNlwAYHSDa1Fw")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs")
 
 # --- Web App using FastAPI ---
 web_app = FastAPI()
@@ -88,7 +88,7 @@ def get_real_download_links(url: str, update_callback: Callable[[str], None] = N
         return download_links
 
     except Exception as e:
-        error_msg = f"❌ Error: {e}"
+        error_msg = f"❌ Failed: {e}"
         send_update(error_msg)
         logger.error(error_msg)
         logger.error(traceback.format_exc())
@@ -110,11 +110,13 @@ async def link_handler(client, message):
 
     loop = asyncio.get_running_loop()
 
-    # Wrap coroutine manually to ensure it's passed correctly
     def update_callback(text: str):
         async def coro():
             try:
-                await status_msg.edit_text(text)
+                if status_msg.text != text:
+                    await status_msg.edit_text(text)
+                else:
+                    logger.debug("Skipped edit (message already has same text).")
             except Exception as e:
                 logger.warning(f"Failed to update message text: {e}")
         asyncio.run_coroutine_threadsafe(coro(), loop)
@@ -124,7 +126,11 @@ async def link_handler(client, message):
 
         if links:
             reply = "\n".join(f"• {link}" for link in links)
-            await status_msg.edit_text(f"🎯 Final Video Link(s):\n{reply}")
+            final_text = f"🎯 Final Video Link(s):\n{reply}"
+            if status_msg.text != final_text:
+                await status_msg.edit_text(final_text)
+            else:
+                logger.info("✅ Skipping edit: Final message already set.")
             logger.info(f"✅ Delivered {len(links)} links to user.")
         else:
             await status_msg.edit_text("⚠️ No valid links found.")
@@ -134,7 +140,6 @@ async def link_handler(client, message):
         await status_msg.edit_text(error_text)
         logger.error(error_text)
         logger.error(traceback.format_exc())
-
 
 # --- Run FastAPI in background ---
 def run_fastapi():

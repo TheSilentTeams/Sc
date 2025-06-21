@@ -1,39 +1,38 @@
 import os
-import logging
-from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes,
+import asyncio
+from pyrogram import Client, filters
+from uc import get_real_download_links
+
+# Replace these or set them via environment variables on Render
+API_ID = int(os.environ.get("API_ID", "25833520"))  # Get this from https://my.telegram.org
+API_HASH = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs")
+
+bot = Client(
+    "dlbot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
 )
-from uc import get_real_download_links  # correct import from uc.py
 
-logging.basicConfig(level=logging.INFO)
-
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs"
-
-async def link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /link <url>")
+@bot.on_message(filters.command("link") & filters.private | filters.group)
+async def link_handler(client, message):
+    if len(message.command) < 2:
+        await message.reply("❌ Usage: `/link <url>`", quote=True)
         return
 
-    url = context.args[0]
-    await update.message.reply_text("🔄 Processing your link...")
+    url = message.command[1]
+    await message.reply("🔄 Processing your link...")
 
     try:
         links = get_real_download_links(url)
         if links:
-            reply = "\n".join(f"• {link}" for link in links)
-            await update.message.reply_text(f"🎯 Final Video Link(s):\n{reply}")
+            text = "🎯 Final Video Link(s):\n" + "\n".join(f"• {link}" for link in links)
         else:
-            await update.message.reply_text("⚠️ No links found.")
+            text = "⚠️ No links found."
+
+        await message.reply(text, quote=True)
     except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
+        await message.reply(f"❌ Error: `{e}`", quote=True)
 
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("link", link_handler))
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+bot.run()

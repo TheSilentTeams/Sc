@@ -3,7 +3,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time
 
 def get_real_download_links(url):
     options = Options()
@@ -12,38 +11,43 @@ def get_real_download_links(url):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
+    options.add_argument("--blink-settings=imagesEnabled=false")  # 🖼️ Disable images
+    options.add_argument("--disable-blink-features=AutomationControlled")  # 🚫 Less bot detection
 
     driver = webdriver.Chrome(options=options)
 
     try:
+        driver.set_page_load_timeout(20)
         driver.get(url)
-        time.sleep(5)
 
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 15)
+
+        # Wait for the download generator button
         button = wait.until(EC.element_to_be_clickable(
             (By.XPATH, "//a[contains(text(), 'Generate Direct Download Link')]")))
         button.click()
 
-        time.sleep(6)
-        final_url = driver.current_url
+        # Wait for redirect to complete
+        wait.until(lambda d: "hubcloud" not in d.current_url)
+
+        # Gather all <a> elements
+        links = wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
 
         download_links = []
+        for link in links:
+            href = link.get_attribute("href")
+            text = (link.text or "").strip().lower()
 
-        wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
-        buttons = driver.find_elements(By.TAG_NAME, "a")
-
-        for btn in buttons:
-            try:
-                text = btn.text.strip().lower()
-                href = btn.get_attribute("href")
-                if text and "download" in text or (href and any(href.endswith(ext) for ext in [".mkv", ".mp4", ".zip"])):
-                    download_links.append(href)
-            except Exception:
-                continue
+            if href and (
+                "download" in text or
+                any(href.endswith(ext) for ext in [".mp4", ".mkv", ".zip", ".rar"])
+            ):
+                download_links.append(href)
 
         return download_links
 
     except Exception as e:
+        print(f"[!] Error: {e}")
         return []
 
     finally:

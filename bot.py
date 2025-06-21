@@ -88,10 +88,14 @@ async def link_handler(client, message):
     url = message.command[1]
     status_msg = await message.reply("🔄 Starting processing...")
 
+    loop = asyncio.get_running_loop()
+
     def update_callback(text: str):
-        asyncio.run_coroutine_threadsafe(status_msg.edit_text(text), asyncio.get_event_loop())
+        # Schedule the coroutine from another thread
+        asyncio.run_coroutine_threadsafe(status_msg.edit_text(text), loop)
 
     try:
+        # Run blocking Selenium code in a thread
         links = await asyncio.to_thread(get_real_download_links, url, update_callback)
 
         if links:

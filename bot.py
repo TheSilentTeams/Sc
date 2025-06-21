@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 API_ID = int(os.environ.get("API_ID", "25833520"))
 API_HASH = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "7112230953:AAF-3O63cMogIRIPv7AgGZQNlwAYHSDa1Fw")
 
 # --- Web App using FastAPI ---
 web_app = FastAPI()

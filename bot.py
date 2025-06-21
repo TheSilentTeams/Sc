@@ -7,7 +7,7 @@ from uc import get_links  # this is your function
 
 logging.basicConfig(level=logging.INFO)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = "7422084781:AAGkwQECl0cSFAfx89_vncmgbuKQ0uHxjSs"
 
 async def link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:

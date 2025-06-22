@@ -76,36 +76,31 @@ def save_seen(seen):
 
 # --- Scraper Functions ---
 # [Full trimmed script with focus on get_latest_movie_links]
-
 def get_latest_movie_links():
     logger.debug("Fetching homepage: %s", BASE_URL)
-    res = requests.get(BASE_URL, headers={"User-Agent": "Mozilla/5.0"})
-    res.raise_for_status()
-    soup = BeautifulSoup(res.text, "html.parser")
-
-    # Locate the <b> tag that says "Latest Updated Movies"
-    target_b = soup.find("b", string=re.compile(r"Latest Updated Movies", re.I))
-    if not target_b:
-        logger.warning("Could not find 'Latest Updated Movies' section")
+    try:
+        res = requests.get(BASE_URL, headers={"User-Agent": "Mozilla/5.0"})
+        res.raise_for_status()
+    except Exception as e:
+        logger.error("Failed to fetch BASE_URL: %s", e)
         return []
 
-    # Walk up to the div and get siblings until we hit non-Fmvideo blocks
-    parent_div = target_b.find_parent("div")
-    if not parent_div:
-        logger.warning("No parent div for target <b> found")
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    # Try to find all divs with class "Fmvideo" (this is where movies are listed)
+    movie_divs = soup.find_all("div", class_=lambda x: x and "Fmvideo" in x)
+    if not movie_divs:
+        logger.warning("No movie divs found with class Fmvideo")
         return []
 
     links = []
-    for sibling in parent_div.find_next_siblings():
-        if sibling.name == "div" and "Fmvideo" in sibling.get("class", []):
-            a = sibling.find("a", href=True)
-            if a:
-                href = a["href"]
-                if "/movie/" in href and href.endswith(".html"):
-                    full_url = urljoin(BASE_URL, href)
-                    links.append(full_url)
-        else:
-            break  # Stop on first non-Fmvideo div
+    for div in movie_divs:
+        a = div.find("a", href=True)
+        if a:
+            href = a["href"]
+            if "movie" in href and href.endswith(".html"):
+                full_url = urljoin(BASE_URL, href)
+                links.append(full_url)
 
     unique = sorted(set(links), reverse=True)[:15]
     logger.info("Found %d latest updated movie links", len(unique))

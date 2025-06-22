@@ -83,29 +83,30 @@ def get_latest_movie_links():
     res.raise_for_status()
     soup = BeautifulSoup(res.text, "html.parser")
 
-    # Find the <b> tag with exact text "Latest Updated Movies"
-    latest_header = soup.find("b", string=re.compile(r"Latest Updated Movies", re.I))
-    if not latest_header:
-        logger.warning("Latest Updated Movies header not found.")
+    # Locate the <b> tag with the target section
+    header = soup.find("b", string=re.compile(r"Latest Updated Movies", re.I))
+    if not header:
+        logger.warning("Could not find 'Latest Updated Movies' header.")
         return []
 
-    # Look for links nearby: scan next siblings for <a> tags with /movie/ in href
+    # Step into the parent div, then collect Fmvideo divs after it
+    current_div = header.find_parent("div")
     links = []
-    for sibling in latest_header.parent.find_next_siblings():
-        a_tags = sibling.find_all("a", href=True)
-        for a in a_tags:
-            href = a["href"]
-            if "/movie/" in href and href.endswith(".html"):
-                links.append(urljoin(BASE_URL, href))
 
-        # Stop if another major section starts (heuristic: strong or b tags)
-        if sibling.find("b") or sibling.name in ["h2", "h3"]:
+    for sibling in current_div.find_next_siblings("div"):
+        if "Fmvideo" in sibling.get("class", []):
+            a_tag = sibling.find("a", href=True)
+            if a_tag:
+                href = a_tag["href"]
+                if "/movie/" in href and href.endswith(".html"):
+                    links.append(urljoin(BASE_URL, href))
+        else:
+            # Break when Fmvideo block sequence ends (likely next section begins)
             break
 
     unique = sorted(set(links), reverse=True)[:15]
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
-
 
 
 def get_server_links(movie_url):

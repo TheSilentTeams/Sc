@@ -9,6 +9,11 @@ from urllib.parse import urljoin
 from fastapi import FastAPI
 import threading
 import uvicorn
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 from pyrogram import Client, filters, utils
 
@@ -62,6 +67,7 @@ def read_root():
 def run_web():
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(web_app, host="0.0.0.0", port=port)
+
 
 # --- Load/Save Config ---
 def load_config():
@@ -121,6 +127,43 @@ def get_latest_movie_links():
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
 
+def bypass_hubcloud(url):
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+
+    driver = webdriver.Chrome(options=options)
+    logger.info(f"🌐 Bypassing HubCloud: {url}")
+    links = []
+
+    try:
+        driver.get(url)
+        wait = WebDriverWait(driver, 15)
+
+        button = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, "//a[contains(text(), 'Generate Direct Download Link')]")))
+        button.click()
+
+        wait.until(lambda d: "hubcloud" not in d.current_url)
+        wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
+
+        for a in driver.find_elements(By.TAG_NAME, "a"):
+            href = a.get_attribute("href")
+            if href and ("download" in (a.text or "").lower() or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
+                links.append(href.strip())
+
+    except Exception as e:
+        logger.warning(f"HubCloud bypass failed: {e}")
+    finally:
+        driver.quit()
+
+    logger.info(f"✅ HubCloud bypassed: {len(links)} links found")
+    return links
 
 
 def get_server_links(movie_url):
@@ -179,13 +222,29 @@ def get_title(movie_url):
         return movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
 
 async def send_to_channel(title, links):
-    logger.info("Sending: %s with %d links", title, len(links))
+    logger.info("Preparing to send: %s with %d links", title, len(links))
+
     msg = f"🎬 **{title}**\n\n🎯 **Links:**\n"
+    hubcloud_scraped = []
+
     for link in links:
         domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
         label = domain.split(".")[0][:10]
+
         msg += f"🔗 **{label}** - {link}\n"
+
+        if "hubcloud" in link:
+            scraped = await asyncio.to_thread(bypass_hubcloud, link)
+            if scraped:
+                hubcloud_scraped.extend(scraped)
+
+    if hubcloud_scraped:
+        msg += "\n🚀 **HubCloud Scraped Links** 🚀\n"
+        for link in hubcloud_scraped:
+            msg += f"• {link}\n"
+
     await app.send_message(CHANNEL_ID, msg)
+
 
 # --- /up command ---
 @app.on_message(filters.command("up") & filters.user(OWNER_ID))

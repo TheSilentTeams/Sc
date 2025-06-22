@@ -8,7 +8,7 @@ import traceback
 
 from fastapi import FastAPI
 import uvicorn
-from pyrogram import Client, filters
+from pyrogram import Client, filters, utils
 from pyrogram.enums import ParseMode
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -40,8 +40,21 @@ CHANNEL_ID = -1002739509521
 CONFIG_FILE = "config.json"
 SEEN_FILE = "seen.json"
 
+def get_peer_type_new(peer_id: int) -> str:
+    peer_id_str = str(peer_id)
+    if not peer_id_str.startswith("-"):
+        return "user"
+    elif peer_id_str.startswith("-100"):
+        return "channel"
+    else:
+        return "chat"
+
+utils.get_peer_type = get_peer_type_new
+
 # --- Web App using FastAPI ---
 web_app = FastAPI()
+
+
 
 @web_app.get("/")
 async def root():

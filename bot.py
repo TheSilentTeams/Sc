@@ -20,13 +20,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 # --- Config ---
-API_ID = int(os.environ.get("API_ID", "12345"))
-API_HASH = os.environ.get("API_HASH", "your_api_hash")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "your_bot_token")
-OWNER_ID = int(os.environ.get("OWNER_ID", "123456789"))
-CHANNEL_ID = -1001234567890  # your channel ID
-
-BASE_URL = "https://skymovieshd.dance"
+API_ID = int(os.environ.get("API_ID", "25833520"))
+API_HASH = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "7422084781:AAEyqYJBAepuCeXgnZcNVxa_Z7aMDcIiK1s")
+OWNER_ID = int(os.environ.get("OWNER_ID", "921365334"))
+CHANNEL_ID = -1002739509521
 CONFIG_FILE = "config.json"
 SEEN_FILE = "seen.json"
 

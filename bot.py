@@ -248,29 +248,23 @@ def run_fastapi():
     server = uvicorn.Server(config)
     asyncio.run(server.serve())
 
-# --- Main entry point ---
+@bot.on_start()
+async def main(client):
+    logger.info("🔍 Bot started. Testing message send...")
+
+    try:
+        await client.get_chat(CHANNEL_ID)
+        await client.send_message(CHANNEL_ID, "✅ Bot successfully connected.")
+    except Exception as e:
+        logger.error(f"Send test failed: {e}")
+
+    asyncio.create_task(monitor_skymovies())
+
 # --- Main entry point ---
 if __name__ == "__main__":
-    def start_fastapi():
-        uvicorn.run(web_app, host="0.0.0.0", port=8000)
-
-    Thread(target=start_fastapi).start()
+    Thread(target=run_fastapi).start()
     logger.info("🚀 FastAPI server started on port 8000")
+    bot.run()
 
-    async def main():
-        await bot.start()
-        logger.info("🔍 Bot started. Testing message send...")
-    
-        try:
-            await bot.get_chat(CHANNEL_ID)  # 🔥 This is crucial for private channels
-            await bot.send_message(CHANNEL_ID, "✅ Bot successfully connected.")
-        except Exception as e:
-            logger.error(f"Send test failed: {e}")
-    
-        bot.loop.create_task(monitor_skymovies())
-        await asyncio.Event().wait()
-
-
-    asyncio.run(main())
 
 

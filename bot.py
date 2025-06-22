@@ -75,27 +75,36 @@ def save_seen(seen):
         json.dump(list(seen), f, indent=2)
 
 # --- Scraper Functions ---
+# [Full trimmed script with focus on get_latest_movie_links]
+
 def get_latest_movie_links():
     logger.debug("Fetching homepage: %s", BASE_URL)
     res = requests.get(BASE_URL, headers={"User-Agent": "Mozilla/5.0"})
     res.raise_for_status()
     soup = BeautifulSoup(res.text, "html.parser")
 
-    # Focus only on "Latest Updated Movies" section
-    latest_section = soup.find("div", class_=re.compile("Latest", re.I))
-    if not latest_section:
-        latest_section = soup  # fallback to whole page
+    # Find the heading "Latest Updated Movies" and its list entries
+    header = soup.find(lambda tag: tag.name in ["h2","h3","div"] and "Latest Updated Movies" in tag.text)
+    if not header:
+        logger.warning("Could not locate 'Latest Updated Movies' header, fallback to homepage")
+        return []
+
+    # Usually the movie links are in the next sibling (like a ul or div)
+    container = header.find_next_sibling()
+    if not container:
+        logger.warning("No container after header, fallback")
+        return []
 
     links = []
-    for a in latest_section.find_all("a", href=True):
+    for a in container.find_all("a", href=True):
         href = a["href"]
         if "/movie/" in href and href.endswith(".html"):
-            full = urljoin(BASE_URL, href)
-            links.append(full)
+            links.append(urljoin(BASE_URL, href))
 
     unique = sorted(set(links), reverse=True)[:15]
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
+
 
 def get_server_links(movie_url):
     logger.debug("Fetching movie page: %s", movie_url)

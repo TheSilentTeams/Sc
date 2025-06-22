@@ -83,27 +83,29 @@ def get_latest_movie_links():
     res.raise_for_status()
     soup = BeautifulSoup(res.text, "html.parser")
 
-    # Find the heading "Latest Updated Movies" and its list entries
-    header = soup.find(lambda tag: tag.name in ["h2","h3","div"] and "Latest Updated Movies" in tag.text)
-    if not header:
-        logger.warning("Could not locate 'Latest Updated Movies' header, fallback to homepage")
+    # Find the <b> tag with exact text "Latest Updated Movies"
+    latest_header = soup.find("b", string=re.compile(r"Latest Updated Movies", re.I))
+    if not latest_header:
+        logger.warning("Latest Updated Movies header not found.")
         return []
 
-    # Usually the movie links are in the next sibling (like a ul or div)
-    container = header.find_next_sibling()
-    if not container:
-        logger.warning("No container after header, fallback")
-        return []
-
+    # Look for links nearby: scan next siblings for <a> tags with /movie/ in href
     links = []
-    for a in container.find_all("a", href=True):
-        href = a["href"]
-        if "/movie/" in href and href.endswith(".html"):
-            links.append(urljoin(BASE_URL, href))
+    for sibling in latest_header.parent.find_next_siblings():
+        a_tags = sibling.find_all("a", href=True)
+        for a in a_tags:
+            href = a["href"]
+            if "/movie/" in href and href.endswith(".html"):
+                links.append(urljoin(BASE_URL, href))
+
+        # Stop if another major section starts (heuristic: strong or b tags)
+        if sibling.find("b") or sibling.name in ["h2", "h3"]:
+            break
 
     unique = sorted(set(links), reverse=True)[:15]
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
+
 
 
 def get_server_links(movie_url):

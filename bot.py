@@ -40,21 +40,11 @@ CHANNEL_ID = -1002739509521
 CONFIG_FILE = "config.json"
 SEEN_FILE = "seen.json"
 
-def get_peer_type_new(peer_id: int) -> str:
-    peer_id_str = str(peer_id)
-    if not peer_id_str.startswith("-"):
-        return "user"
-    elif peer_id_str.startswith("-100"):
-        return "channel"
-    else:
-        return "chat"
+# Patch Pyrogram get_peer_type
+utils.get_peer_type = lambda peer_id: "channel" if str(peer_id).startswith("-100") else ("chat" if str(peer_id).startswith("-") else "user")
 
-utils.get_peer_type = get_peer_type_new
-
-# --- Web App using FastAPI ---
+# --- FastAPI Web App ---
 web_app = FastAPI()
-
-
 
 @web_app.get("/")
 async def root():
@@ -85,38 +75,20 @@ def get_real_download_links(url: str, update_callback: Callable[[str], None] = N
     try:
         send_update("\U0001F310 Opening URL...")
         driver.get(url)
-
         wait = WebDriverWait(driver, 15)
         send_update("\U0001F50D Looking for download generator button...")
-
         button = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Generate Direct Download Link')]")))
         button.click()
-
         send_update("\u23F3 Waiting for redirection...")
         wait.until(lambda d: "hubcloud" not in d.current_url)
-
         send_update("\U0001F50E Scanning for final links...")
         wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
         buttons = driver.find_elements(By.TAG_NAME, "a")
-
-        download_links = []
-        for btn in buttons:
-            href = btn.get_attribute("href")
-            text = (btn.text or "").strip().lower()
-
-            if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
-                download_links.append(href)
-
-        send_update(f"✅ Found {len(download_links)} links.")
-        return download_links
-
+        return [btn.get_attribute("href") for btn in buttons if btn.get_attribute("href") and ("download" in (btn.text or "").lower() or btn.get_attribute("href").endswith((".mp4", ".mkv", ".zip", ".rar")))]
     except Exception as e:
-        error_msg = f"❌ Failed: {e}"
-        send_update(error_msg)
-        logger.error(error_msg)
+        logger.error(f"❌ Failed: {e}")
         logger.error(traceback.format_exc())
         return []
-
     finally:
         driver.quit()
         logger.info("Selenium browser closed.")
@@ -130,7 +102,6 @@ async def link_handler(client, message):
     url = message.command[1]
     status_msg = await message.reply("🔄 Starting processing...")
     logger.info(f"Received /hub command: {url} from user {message.from_user.id}")
-
     loop = asyncio.get_running_loop()
 
     def update_callback(text: str):
@@ -144,18 +115,13 @@ async def link_handler(client, message):
 
     try:
         links = await asyncio.to_thread(get_real_download_links, url, update_callback)
-
         if links:
-            reply = "\n".join(f"• {link}" for link in links)
-            final_text = f"🎯 Final Video Link(s):\n{reply}"
-            await status_msg.edit_text(final_text)
+            await status_msg.edit_text("🎯 Final Video Link(s):\n" + "\n".join(f"• {link}" for link in links))
         else:
             await status_msg.edit_text("⚠️ No valid links found.")
     except Exception as e:
-        error_text = f"❌ Error occurred:\n`{e}`"
-        await status_msg.edit_text(error_text)
-        logger.error(error_text)
         logger.error(traceback.format_exc())
+        await status_msg.edit_text(f"❌ Error occurred:\n`{e}`")
 
 # --- SkymoviesHD Monitor ---
 def load_seen():
@@ -179,11 +145,7 @@ def get_config():
 def get_latest_movies(base_url):
     res = requests.get(base_url, headers={'User-Agent': 'Mozilla/5.0'})
     soup = BeautifulSoup(res.text, 'html.parser')
-    links = []
-    for a in soup.find_all("a", href=True):
-        if "/movie/" in a['href'] and a['href'].endswith(".html"):
-            links.append(urljoin(base_url, a['href']))
-    return sorted(set(links), reverse=True)[:10]
+    return sorted(set(urljoin(base_url, a['href']) for a in soup.find_all("a", href=True) if "/movie/" in a['href'] and a['href'].endswith(".html")), reverse=True)[:10]
 
 def get_server_links(page_url):
     res = requests.get(page_url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -198,13 +160,12 @@ def extract_final_links(redirector_url):
         return []
 
 def clean_links(links):
-    return sorted(set([l.strip() for l in links if l.startswith("http")]))
+    return sorted(set(l.strip() for l in links if l.startswith("http")))
 
 def parse_movie_info(url):
     title = url.split("/")[-1].replace("-", " ").replace(".html", "").strip()
     match = re.search(r'(\[\d+(?:\.\d+)?GB\])', title, re.IGNORECASE)
-    size = match.group(1) if match else "Unknown Size"
-    return title, size
+    return title, match.group(1) if match else "Unknown Size"
 
 async def monitor_skymovies():
     seen = load_seen()
@@ -214,15 +175,12 @@ async def monitor_skymovies():
         new_movies = [url for url in latest if url not in seen]
         for url in new_movies:
             server_links = get_server_links(url)
-            all_links = []
-            for server in server_links:
-                all_links.extend(extract_final_links(server))
+            all_links = sum([extract_final_links(link) for link in server_links], [])
             final_links = clean_links(all_links)
             if not final_links:
                 continue
             title, size = parse_movie_info(url)
-            link_text = "\n".join([f"[Server {i+1}](<{l}>)" for i, l in enumerate(final_links)])
-            message = f"🎬 **{title}**\n📦 **Size:** {size}\n\n{link_text}"
+            message = f"🎬 **{title}**\n📦 **Size:** {size}\n\n" + "\n".join([f"[Server {i+1}](<{l}>)" for i, l in enumerate(final_links)])
             try:
                 await bot.send_message(CHANNEL_ID, message, parse_mode=ParseMode.MARKDOWN)
                 seen.add(url)
@@ -237,53 +195,22 @@ async def update_domain(client, message):
     if len(parts) != 2:
         await message.reply("Usage: /up <new base URL>")
         return
-    new_url = parts[1]
     with open(CONFIG_FILE, "w") as f:
-        json.dump({"base_url": new_url}, f)
-    await message.reply(f"✅ Domain updated to: {new_url}")
+        json.dump({"base_url": parts[1]}, f)
+    await message.reply(f"✅ Domain updated to: {parts[1]}")
 
-# --- Run FastAPI in background ---
-def run_fastapi():
-    config = uvicorn.Config(web_app, host="0.0.0.0", port=8000, log_level="info")
-    server = uvicorn.Server(config)
-    asyncio.run(server.serve())
-
-@bot.on_start()
-async def main(client):
-    logger.info("🔍 Bot started. Testing message send...")
-
-    try:
-        await client.get_chat(CHANNEL_ID)
-        await client.send_message(CHANNEL_ID, "✅ Bot successfully connected.")
-    except Exception as e:
-        logger.error(f"Send test failed: {e}")
-
-    asyncio.create_task(monitor_skymovies())
-
-# --- Main entry point ---
+# --- Entrypoint ---
 if __name__ == "__main__":
-    def start_fastapi():
-        uvicorn.run(web_app, host="0.0.0.0", port=8000)
+    Thread(target=lambda: uvicorn.run(web_app, host="0.0.0.0", port=8000)).start()
 
-    Thread(target=start_fastapi).start()
-    logger.info("🚀 FastAPI server started on port 8000")
-
-    async def run_bot():
+    async def main():
         await bot.start()
         logger.info("🔍 Bot started. Testing message send...")
-
         try:
-            await bot.get_chat(CHANNEL_ID)
             await bot.send_message(CHANNEL_ID, "✅ Bot successfully connected.")
         except Exception as e:
             logger.error(f"Send test failed: {e}")
-
         asyncio.create_task(monitor_skymovies())
-
         await bot.idle()
 
-    asyncio.run(run_bot())
-
-
-
-
+    asyncio.run(main())

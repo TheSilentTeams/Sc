@@ -6,6 +6,9 @@ import asyncio
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from fastapi import FastAPI
+import threading
+import uvicorn
 
 from pyrogram import Client, filters, utils
 
@@ -34,6 +37,9 @@ fh = logging.FileHandler(LOG_FILE)
 fh.setFormatter(formatter)
 logger.addHandler(fh)
 
+
+web_app = FastAPI()
+
 # --- Patch Pyrogram Peer Type ---
 def get_peer_type_new(peer_id: int) -> str:
     peer_id_str = str(peer_id)
@@ -47,6 +53,15 @@ utils.get_peer_type = get_peer_type_new
 
 # --- Pyrogram App ---
 app = Client("movie-monitor", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+
+@web_app.get("/")
+def read_root():
+    return {"status": "running", "message": "Movie bot monitor is active"}
+
+def run_web():
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(web_app, host="0.0.0.0", port=port)
 
 # --- Load/Save Config ---
 def load_config():
@@ -222,8 +237,20 @@ async def monitor():
 
 # --- Run ---
 if __name__ == "__main__":
+    def start_fastapi():
+        run_web()
+
+    def start_bot():
+        asyncio.run(main())
+
+    # Start FastAPI server in a separate thread
+    threading.Thread(target=start_fastapi).start()
+
+    # Start the bot monitor loop
     async def main():
         await app.start()
         logger.info("Bot started and monitoring.")
         await monitor()
-    asyncio.run(main())
+
+    start_bot()
+

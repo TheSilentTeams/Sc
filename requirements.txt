@@ -5,3 +5,5 @@ selenium==4.21.0
 setuptools
 fastapi
 uvicorn
+requests
+beautifulsoup4

@@ -241,4 +241,5 @@ if __name__ == "__main__":
     logger.info("🚀 FastAPI server started on port 8000")
     bot.start()
     bot.loop.create_task(monitor_skymovies())
-    bot.idle()
+    bot.run()
+

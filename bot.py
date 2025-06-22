@@ -172,11 +172,34 @@ def get_server_links(movie_url):
     res.raise_for_status()
     soup = BeautifulSoup(res.text, "html.parser")
 
-    servers = []
-    for a in soup.find_all("a", href=True):
-        if "howblogs" in a["href"] or "server" in a.get_text().lower():
-            servers.append(a["href"])
-    return servers
+    sections = {
+        "gdrive": [],
+        "hevc": [],
+        "other": []
+    }
+
+    current_section = "other"
+
+    for elem in soup.find_all(["b", "strong", "p", "a"]):
+        text = (elem.get_text(strip=True) or "").lower()
+
+        if "google drive direct" in text:
+            current_section = "gdrive"
+            continue
+        elif "10bit hevc" in text:
+            current_section = "hevc"
+            continue
+        elif elem.name == "a" and elem.has_attr("href"):
+            href = elem["href"]
+            if href.startswith("http") and "server" in text:
+                sections[current_section].append(href)
+
+    return {
+        "gdrive": list(set(sections["gdrive"])),
+        "hevc": list(set(sections["hevc"])),
+        "servers": list(set(sections["other"]))
+    }
+
 
 def extract_final_links(redirector_url):
     try:
@@ -221,22 +244,38 @@ def get_title(movie_url):
         logger.error("Failed to get title from %s: %s", movie_url, e)
         return movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
 
-async def send_to_channel(title, links):
-    logger.info("Preparing to send: %s with %d links", title, len(links))
+async def send_to_channel(title, all_links):
+    logger.info("Preparing to send: %s", title)
 
-    msg = f"🎬 **{title}**\n\n🎯 **Links:**\n"
+    msg = f"🎬 **{title}**\n"
     hubcloud_scraped = []
 
-    for link in links:
-        domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
-        label = domain.split(".")[0][:10]
+    def format_links(links, prefix="SERVER"):
+        result = ""
+        for i, link in enumerate(links, 1):
+            domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
+            label = f"{prefix} {i:02} - {link}"
+            result += f"• {label}\n"
 
-        msg += f"🔗 **{label}** - {link}\n"
+            if "hubcloud" in link:
+                scraped = asyncio.run_coroutine_threadsafe(
+                    asyncio.to_thread(bypass_hubcloud, link), asyncio.get_running_loop()
+                ).result()
+                if scraped:
+                    hubcloud_scraped.extend(scraped)
+        return result
 
-        if "hubcloud" in link:
-            scraped = await asyncio.to_thread(bypass_hubcloud, link)
-            if scraped:
-                hubcloud_scraped.extend(scraped)
+    if all_links.get("gdrive"):
+        msg += "\n☁️ **Google Drive Direct Links**\n"
+        msg += format_links(all_links["gdrive"], "GDRIVE")
+
+    if all_links.get("hevc"):
+        msg += "\n📦 **1080P 10Bit HEVC Links**\n"
+        msg += format_links(all_links["hevc"], "HEVC")
+
+    if all_links.get("servers"):
+        msg += "\n🎯 **Other Server Links**\n"
+        msg += format_links(all_links["servers"], "ALT")
 
     if hubcloud_scraped:
         msg += "\n🚀 **HubCloud Scraped Links** 🚀\n"
@@ -244,6 +283,7 @@ async def send_to_channel(title, links):
             msg += f"• {link}\n"
 
     await app.send_message(CHANNEL_ID, msg)
+
 
 
 # --- /up command ---

@@ -211,6 +211,6 @@ if __name__ == "__main__":
         except Exception as e:
             logger.error(f"Send test failed: {e}")
         asyncio.create_task(monitor_skymovies())
-        await bot.idle()
+        await asyncio.Event().wait()
 
     asyncio.run(main())

@@ -1,67 +1,67 @@
 import os
 import json
 import time
-import asyncio
-import logging
-import traceback
+import re
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-from pyrogram import Client, filters
-from pyrogram.enums import ParseMode
-from fastapi import FastAPI
-from threading import Thread
-import uvicorn
+from pyrogram import Client, filters, utils
+from pyrogram.enums import ChatAction
 
 # --- Config ---
 API_ID = int(os.environ.get("API_ID", "25833520"))
-API_HASH = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7")
+API_HASH = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7"))
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "7422084781:AAEyqYJBAepuCeXgnZcNVxa_Z7aMDcIiK1s")
 OWNER_ID = int(os.environ.get("OWNER_ID", "921365334"))
 CHANNEL_ID = -1002739509521
 
 CONFIG_FILE = "config.json"
 SEEN_FILE = "seen.json"
-CHECK_INTERVAL = 300  # seconds
 
-# --- Logging ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# --- Patch peer type ---
+def get_peer_type_new(peer_id: int) -> str:
+    peer_id_str = str(peer_id)
+    if not peer_id_str.startswith("-"):
+        return "user"
+    elif peer_id_str.startswith("-100"):
+        return "channel"
+    else:
+        return "chat"
 
-# --- Web App ---
-web_app = FastAPI()
+utils.get_peer_type = get_peer_type_new
 
-@web_app.get("/")
-async def root():
-    return {"status": "ok", "message": "Bot is alive!"}
+# --- Pyrogram Client ---
+app = Client("movie-monitor", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# --- Load config ---
+# --- Config Loader ---
 def load_config():
     if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
+        with open(CONFIG_FILE) as f:
             return json.load(f)
     return {"BASE_URL": "https://skymovieshd.dance"}
 
-def save_config(config):
+def save_config(cfg):
     with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f)
+        json.dump(cfg, f)
 
 config = load_config()
-BASE_URL = config["base_url"]
+BASE_URL = config["BASE_URL"]
+CHECK_INTERVAL = 300
 
-# --- Seen Management ---
+# --- Seen Tracking ---
 def load_seen():
-    if os.path.exists(SEEN_FILE):
-        with open(SEEN_FILE, "r") as f:
+    try:
+        with open(SEEN_FILE, 'r') as f:
             return set(json.load(f))
-    return set()
+    except:
+        return set()
 
 def save_seen(seen):
-    with open(SEEN_FILE, "w") as f:
+    with open(SEEN_FILE, 'w') as f:
         json.dump(list(seen), f)
 
-# --- Scraping Logic ---
+# --- Scraper Functions ---
 def get_latest_movie_links():
     res = requests.get(BASE_URL, headers={'User-Agent': 'Mozilla/5.0'})
     soup = BeautifulSoup(res.text, 'html.parser')
@@ -73,8 +73,8 @@ def get_latest_movie_links():
             links.append(full_url)
     return sorted(set(links), reverse=True)[:15]
 
-def get_server_links(skymovies_url):
-    res = requests.get(skymovies_url)
+def get_server_links(movie_url):
+    res = requests.get(movie_url)
     soup = BeautifulSoup(res.text, 'html.parser')
     servers = []
     for a in soup.find_all('a', href=True):
@@ -85,74 +85,82 @@ def get_server_links(skymovies_url):
 def extract_final_links(redirector_url):
     try:
         res = requests.get(redirector_url, headers={'User-Agent': 'Mozilla/5.0'})
-        soup = BeautifulSoup(res.text, 'html.parser')
-        raw_text = soup.get_text()
-        links = re.findall(r'https?://[^\s"\']+', raw_text)
-        return links
+        raw = BeautifulSoup(res.text, 'html.parser').get_text()
+        return re.findall(r'https?://[^\s"\']+', raw)
     except:
         return []
 
 def clean_links(links):
-    cleaned = [link.strip() for link in links if link.startswith("http")]
-    return sorted(set(cleaned))
+    return sorted(list(set(link.strip() for link in links if link.startswith("http"))))
 
-# --- Telegram Bot ---
-bot = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+def get_title_and_size(movie_url):
+    try:
+        res = requests.get(movie_url)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        title = soup.find("h1")
+        size_match = re.search(r'\b(\d+(?:\.\d+)?\s*(?:MB|GB))\b', soup.get_text(), re.I)
+        return title.text.strip() if title else "Unknown Title", size_match.group(0) if size_match else "Unknown Size"
+    except:
+        return "Unknown Title", "Unknown Size"
 
-async def notify_to_channel(movie_url, links):
-    name = movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
-    text = f"🆕 New Movie: [{name}]({movie_url})\n"
+async def send_to_channel(title, size, links):
+    msg = f"🎬 **{title}**\n📦 Size: `{size}`\n\n🎯 **Links:**\n"
     for link in links:
-        label = link.split("//")[1].split("/")[0].split(".")[0]
-        text += f"👍🏻 **{label}** - {link}\n"
+        domain = re.sub(r'^https?://(www\.)?', '', link).split('/')[0]
+        domain_label = domain.split('.')[0][:10]  # limit to 10 chars
+        msg += f"👍🏻**{domain_label}** - {link}\n"
+    await app.send_message(CHANNEL_ID, msg)
 
-    await bot.send_message(CHANNEL_ID, text, parse_mode=ParseMode.MARKDOWN)
+# --- Updater Command ---
+@app.on_message(filters.command("up") & filters.user(OWNER_ID))
+async def update_url(client, message):
+    global BASE_URL
+    parts = message.text.split()
+    if len(parts) != 2:
+        await message.reply("❌ Usage: `/up https://newdomain.xyz`", quote=True)
+        return
 
-async def monitor_loop():
+    BASE_URL = parts[1]
+    config["BASE_URL"] = BASE_URL
+    save_config(config)
+    await message.reply(f"✅ BASE_URL updated to: {BASE_URL}")
+
+# --- Monitoring Loop ---
+async def monitor():
     seen = load_seen()
     while True:
-        logger.info("🔍 Checking for new content...")
-        latest = get_latest_movie_links()
-        new_links = [url for url in latest if url not in seen]
+        print("🔍 Checking for updates...")
+        try:
+            latest = get_latest_movie_links()
+            new_entries = [url for url in latest if url not in seen]
 
-        for url in new_links:
-            logger.info(f"📥 New Detected: {url}")
-            server_links = get_server_links(url)
-            all_links = []
-            for server in server_links:
-                all_links.extend(extract_final_links(server))
-            final_links = clean_links(all_links)
+            for url in new_entries:
+                title, size = get_title_and_size(url)
+                print(f"🎥 Found New: {title}")
+                server_links = get_server_links(url)
 
-            if final_links:
-                await notify_to_channel(url, final_links)
+                all_links = []
+                for s in server_links:
+                    all_links.extend(extract_final_links(s))
+
+                final_links = clean_links(all_links)
+                if final_links:
+                    await send_to_channel(title, size, final_links)
+
                 seen.add(url)
                 save_seen(seen)
 
-        logger.info(f"⏳ Sleeping {CHECK_INTERVAL} seconds...\n")
+        except Exception as e:
+            print("❌ Error during check:", e)
+
         await asyncio.sleep(CHECK_INTERVAL)
 
-@bot.on_message(filters.command("up") & filters.user(OWNER_ID))
-async def update_base(client, message):
-    global BASE_URL, config
-    if len(message.command) < 2:
-        await message.reply("❌ Usage: /up <new_url>")
-        return
-    new_url = message.command[1]
-    config["BASE_URL"] = new_url
-    BASE_URL = new_url
-    save_config(config)
-    await message.reply(f"✅ BASE_URL updated to:\n{new_url}")
-
-# --- Launch Background Services ---
-def run_fastapi():
-    uvicorn.run(web_app, host="0.0.0.0", port=8000)
-
 # --- Main ---
-if __name__ == "__main__":
-    Thread(target=run_fastapi, daemon=True).start()
+import asyncio
 
+if __name__ == "__main__":
     async def main():
-        await bot.start()
-        await monitor_loop()
+        await app.start()
+        await monitor()
 
     asyncio.run(main())

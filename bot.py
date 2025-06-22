@@ -30,7 +30,7 @@ BASE_URL = "https://skymovieshd.dance"
 CONFIG_FILE = "config.json"
 SEEN_FILE = "seen.json"
 
-# --- Web App ---
+# --- Web ---
 web_app = FastAPI()
 
 @web_app.get("/")
@@ -40,7 +40,7 @@ async def root():
 # --- Bot ---
 bot = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# --- Utilities ---
+# --- Utility ---
 def load_seen():
     try:
         with open(SEEN_FILE, "r") as f:
@@ -89,7 +89,7 @@ def extract_final_links(redirector_url):
 def clean_links(links):
     return sorted(set(l.strip() for l in links if l.startswith("http")))
 
-# --- Monitor Task ---
+# --- Monitor ---
 async def monitor_skymovies():
     seen = load_seen()
     while True:
@@ -121,37 +121,38 @@ async def monitor_skymovies():
             logger.error(f"Monitor error: {e}\n{traceback.format_exc()}")
         await asyncio.sleep(300)
 
-# --- Commands ---
-@bot.on_message(filters.command("up") & filters.user(OWNER_ID))
-async def update_domain(client, message):
-    parts = message.text.split()
-    if len(parts) != 2:
-        await message.reply("Usage: /up <new base URL>")
-        return
-    with open(CONFIG_FILE, "w") as f:
-        json.dump({"base_url": parts[1]}, f)
-    await message.reply(f"✅ Domain updated to: {parts[1]}")
-
+# --- Bot Commands ---
 @bot.on_message(filters.command("start"))
 async def start_handler(client, message):
-    await message.reply("👋 Bot is running! Use /hub <url> or wait for new uploads.")
+    await message.reply("👋 Bot is running!")
 
-@bot.on_message(filters.text & ~filters.command(["up", "start"]))
-async def catch_all(client, message):
-    await message.reply("Hi there! Use /hub <url> to extract download links or wait for new releases.")
+@bot.on_message(filters.command("up") & filters.user(OWNER_ID))
+async def update_domain(client, message):
+    await message.reply("✋ This command is disabled in this version.")
 
-# --- Entry Point ---
+@bot.on_message(filters.text & ~filters.command(["start", "up"]))
+async def fallback(client, message):
+    await message.reply("🤖 Waiting for new movies! No commands needed.")
+
+# --- Run ---
 if __name__ == "__main__":
+    # Start FastAPI server
     Thread(target=lambda: uvicorn.run(web_app, host="0.0.0.0", port=8000)).start()
 
     async def main():
         await bot.start()
-        logger.info("✅ Bot started and connected.")
+
+        # 🐒 Monkey patch: Resolve peer ID by caching channel manually
         try:
-            await bot.send_message(CHANNEL_ID, "🚀 Bot is online and monitoring skymovieshd!")
+            await bot.get_chat(CHANNEL_ID)
+            logger.info("✅ Channel peer resolved.")
         except Exception as e:
-            logger.error(f"Failed to send startup message: {e}")
+            logger.warning(f"⚠️ Cannot resolve channel peer yet: {e}")
+
+        logger.info("✅ Bot started and connected.")
         asyncio.create_task(monitor_skymovies())
-        await bot.idle()
+
+        # 💤 No idle() – use wait forever method
+        await asyncio.Event().wait()
 
     asyncio.run(main())

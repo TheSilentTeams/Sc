@@ -48,7 +48,7 @@ def save_config(config):
         json.dump(config, f)
 
 config = load_config()
-BASE_URL = config["BASE_URL"]
+BASE_URL = config["base_url"]
 
 # --- Seen Management ---
 def load_seen():

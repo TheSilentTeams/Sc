@@ -46,7 +46,7 @@ def save_config(cfg):
         json.dump(cfg, f)
 
 config = load_config()
-BASE_URL = config["BASE_URL"]
+BASE_URL = config["base_url"]
 CHECK_INTERVAL = 300
 
 # --- Seen Tracking ---

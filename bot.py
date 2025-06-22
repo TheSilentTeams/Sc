@@ -236,6 +236,7 @@ def run_fastapi():
     asyncio.run(server.serve())
 
 # --- Main entry point ---
+# --- Main entry point ---
 if __name__ == "__main__":
     def start_fastapi():
         uvicorn.run(web_app, host="0.0.0.0", port=8000)
@@ -243,16 +244,15 @@ if __name__ == "__main__":
     Thread(target=start_fastapi).start()
     logger.info("🚀 FastAPI server started on port 8000")
 
-   async def main():
-    await bot.start()
-    logger.info("🔍 Bot started. Testing message send...")
-    try:
-        await bot.send_message(CHANNEL_ID, "✅ Bot successfully connected.")
-    except Exception as e:
-        logger.error(f"Send test failed: {e}")
-    bot.loop.create_task(monitor_skymovies())
-    await bot.idle()
-
+    async def main():
+        await bot.start()
+        logger.info("🔍 Bot started. Testing message send...")
+        try:
+            await bot.send_message(CHANNEL_ID, "✅ Bot successfully connected.")
+        except Exception as e:
+            logger.error(f"Send test failed: {e}")
+        bot.loop.create_task(monitor_skymovies())
+        await bot.idle()
 
     asyncio.run(main())
 

@@ -339,7 +339,7 @@ async def monitor():
 
 # --- Run ---
  # --- Run ---
- if __name__ == "__main__":
-     # 1) Launch your FastAPI health-check in the background
-     threading.Thread(target=run_web, daemon=True).start()
-     app.run(monitor())      # <-- call the coroutine, not the function
+if __name__ == "__main__":
+    # 1) Launch your FastAPI health-check in the background
+    threading.Thread(target=run_web, daemon=True).start()
+    app.run(monitor())      # <-- call the coroutine, not the function

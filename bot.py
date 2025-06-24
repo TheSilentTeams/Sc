@@ -338,8 +338,21 @@ async def monitor():
         await asyncio.sleep(CHECK_INTERVAL)
 
 # --- Run ---
- # --- Run ---
 if __name__ == "__main__":
-    # 1) Launch your FastAPI health-check in the background
+    # 1) Launch FastAPI (health-check endpoint) in its own daemon thread
     threading.Thread(target=run_web, daemon=True).start()
-    app.run(monitor())      # <-- call the coroutine, not the function
+
+    # 2) Use asyncio.run() to drive our startup+monitor+idle sequence
+    async def main():
+        # Start the Telegram client
+        await app.start()
+        logger.info("Bot started and monitoring.")
+
+        # Launch monitor() in the background—now that app is started
+        asyncio.create_task(monitor())
+
+        # Keep the client alive to handle /up and /hub commands
+        await app.idle()
+
+    # Kick it all off
+    asyncio.run(main())

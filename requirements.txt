@@ -6,4 +6,4 @@ uvicorn
 requests
 beautifulsoup4
 nest_asyncio
-playwright
+playwright==1.44.0

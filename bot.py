@@ -337,7 +337,7 @@ async def monitor():
 
         await asyncio.sleep(CHECK_INTERVAL)
 
-@app.on_connect()
+@app.connect()
 async def on_connect(client, _):
     logger.info("Client connected — launching monitor task")
     # fire-and-forget monitor; client is fully started

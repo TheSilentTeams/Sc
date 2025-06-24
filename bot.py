@@ -337,9 +337,17 @@ async def monitor():
 
         await asyncio.sleep(CHECK_INTERVAL)
 
-# --- Run ---
+@app.on_connect()
+async def on_connect(client, _):
+    logger.info("Client connected — launching monitor task")
+    # fire-and-forget monitor; client is fully started
+    asyncio.create_task(monitor())
+
+
 if __name__ == "__main__":
-    # 1) Launch FastAPI (health-check endpoint) in its own daemon thread
+    # 1) Launch FastAPI (health-check) in the background
     threading.Thread(target=run_web, daemon=True).start()
 
+    # 2) Start the Telegram client, schedule on_connect, then idle forever
     app.run()
+

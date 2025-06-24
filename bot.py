@@ -135,13 +135,13 @@ async def bypass_hubcloud(url):
             page = await context.new_page()
 
             logger.info(f"🌐 Bypassing HubCloud (Playwright): {url}")
-            await page.goto(url, timeout=20000)
+            await page.goto(url, timeout=45000)
 
             # Click the "Generate Direct Download Link" button
-            await page.click("text='Generate Direct Download Link'", timeout=15000)
+            await page.click("text='Generate Direct Download Link'", timeout=45000)
 
             # Wait until redirected away from HubCloud
-            await page.wait_for_url(lambda u: "hubcloud" not in u, timeout=15000)
+            await page.wait_for_url(lambda u: "hubcloud" not in u, timeout=45000)
 
             # Wait for all links to be present
             anchors = await page.query_selector_all("a")

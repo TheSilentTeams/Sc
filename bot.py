@@ -247,7 +247,7 @@ async def send_to_channel(title, links):
 
 
 # --- /up command ---
-@app.on_message(filters.command("up") & filters.user(OWNER_ID))
+@app.on_message(filters.command("up"))
 async def update_url(client, message):
     try:
         parts = message.text.split(maxsplit=1)
@@ -267,7 +267,7 @@ async def update_url(client, message):
         logger.error("Failed to update BASE_URL: %s", e)
         await message.reply("❌ Failed to update BASE_URL.")
 
-@app.on_message(filters.command("hub") & filters.private)
+@app.on_message(filters.command("hub"))
 async def hubcloud_bypass(client, message):
     parts = message.text.split(maxsplit=1)
     if len(parts) != 2:

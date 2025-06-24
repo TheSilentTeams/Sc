@@ -337,12 +337,13 @@ async def monitor():
 
         await asyncio.sleep(CHECK_INTERVAL)
 
-@app.on_startup()
-async def startup_monitor():
-    logger.info("🚀 Starting background monitor task...")
+async def main():
+    await app.start()
     asyncio.create_task(monitor())
+    await idle()
+    await app.stop()
 
 if __name__ == "__main__":
     threading.Thread(target=run_web, daemon=True).start()
-    app.run()
+    asyncio.run(main())
 

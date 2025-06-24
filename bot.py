@@ -339,19 +339,9 @@ async def monitor():
 
 # --- Run ---
 if __name__ == "__main__":
-    def start_fastapi():
-        run_web()
+    # 1) Launch your FastAPI health-check in the background
+    threading.Thread(target=run_web, daemon=True).start()
 
-    def start_bot():
-        asyncio.run(main())
+    # 2) Start Pyrogram, schedule monitor(), then idle forever
+    app.run(monitor)
 
-    # Start FastAPI server in a separate thread
-    threading.Thread(target=start_fastapi).start()
-
-    # Start the bot monitor loop
-    async def main():
-        threading.Thread(target=run_web, daemon=True).start()
-        logger.info("Bot started and monitoring.")
-        app.run(monitor)
-
-    start_bot()

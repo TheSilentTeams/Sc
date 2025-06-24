@@ -245,55 +245,62 @@ async def send_to_channel(title, links):
 
     await app.send_message(CHANNEL_ID, msg)
 
-
-# --- /up command ---
-@app.on_message(filters.command("up"))
+@app.on_message(filters.command("up") & filters.user(OWNER_ID))
 async def update_url(client, message):
-    try:
-        parts = message.text.split(maxsplit=1)
-        if len(parts) != 2:
-            await message.reply("❌ Usage: `/up https://newdomain.xyz`", quote=True)
-            return
+    logger.info(f"Triggered /up by {message.from_user.id} with text: {message.text}")
+    
+    if len(message.command) < 2:
+        await message.reply("❌ Usage: /up <https://newdomain.xyz>")
+        return
 
-        new_url = parts[1].strip()
+    new_url = message.command[1].strip()
+
+    if not new_url.startswith("http"):
+        await message.reply("❌ That doesn't look like a valid URL.")
+        return
+
+    try:
         global BASE_URL
         BASE_URL = new_url
         config["BASE_URL"] = new_url
         save_config(config)
 
-        logger.warning("BASE_URL updated to %s by %s", new_url, message.from_user.id)
-        await message.reply(f"✅ BASE_URL updated to: `{new_url}`", quote=True)
+        logger.info(f"✅ BASE_URL updated to: {new_url}")
+        await message.reply(f"✅ BASE_URL updated to:\n`{new_url}`")
     except Exception as e:
-        logger.error("Failed to update BASE_URL: %s", e)
-        await message.reply("❌ Failed to update BASE_URL.")
+        logger.error(f"Error in /up: {e}")
+        await message.reply(f"❌ Failed to update BASE_URL.\n`{e}`")
+
 
 @app.on_message(filters.command("hub"))
 async def hubcloud_bypass(client, message):
-    parts = message.text.split(maxsplit=1)
-    if len(parts) != 2:
-        await message.reply("❌ Usage: `/hub <hubcloud_link>`", quote=True)
+    logger.info(f"Triggered /hub by {message.from_user.id} with text: {message.text}")
+    
+    if len(message.command) < 2:
+        await message.reply("❌ Usage: /hub <hubcloud_link>")
         return
 
-    url = parts[1].strip()
-
+    url = message.command[1]
     if "hubcloud" not in url:
         await message.reply("❌ That doesn't look like a valid HubCloud link.")
         return
 
-    msg = await message.reply("⏳ Bypassing HubCloud link, please wait...")
+    status_msg = await message.reply("⏳ Bypassing HubCloud link, please wait...")
 
     try:
+        loop = asyncio.get_running_loop()
         links = await asyncio.to_thread(bypass_hubcloud, url)
 
         if not links:
-            await msg.edit("❌ Failed to bypass the HubCloud link.")
+            await status_msg.edit("❌ Failed to bypass the HubCloud link.")
             return
 
-        text = "🚀 **HubCloud Bypassed Links:**\n\n" + "\n".join(f"• {l}" for l in links)
-        await msg.edit(text)
+        reply = "\n".join(f"• {l}" for l in links)
+        await status_msg.edit(f"🚀 **Bypassed Links:**\n{reply}")
     except Exception as e:
-        logger.error("Error in /hub: %s", e)
-        await msg.edit("❌ An error occurred while bypassing.")
+        logger.error(f"Error in /hub: {e}")
+        await status_msg.edit(f"❌ Error: {e}")
+
 
 
 

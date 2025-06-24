@@ -350,8 +350,8 @@ if __name__ == "__main__":
 
     # Start the bot monitor loop
     async def main():
-        await app.start()
+        threading.Thread(target=run_web, daemon=True).start()
         logger.info("Bot started and monitoring.")
-        await monitor()
+        app.run(monitor)
 
     start_bot()

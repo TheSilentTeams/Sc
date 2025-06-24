@@ -1,11 +1,9 @@
 pyrogram==2.0.106
 tgcrypto
-undetected-chromedriver==3.5.4
-selenium==4.21.0
 setuptools
 fastapi
 uvicorn
 requests
 beautifulsoup4
 nest_asyncio
-webdriver-manager
+playwright

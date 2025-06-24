@@ -302,8 +302,6 @@ async def hubcloud_bypass(client, message):
         await status_msg.edit_text(f"❌ Error: {e}")
 
 
-
-
 # --- Monitor Loop ---
 async def monitor():
     seen = load_seen()
@@ -311,19 +309,20 @@ async def monitor():
 
     while True:
         try:
-            latest = get_latest_movie_links()
+            latest = await asyncio.to_thread(get_latest_movie_links)
             new_items = [u for u in latest if u not in seen]
 
             if new_items:
                 logger.info("Found %d new item(s)", len(new_items))
 
             for url in new_items:
-                title = get_title(url)
-                server_links = get_server_links(url)
+                title = await asyncio.to_thread(get_title, url)
+                server_links = await asyncio.to_thread(get_server_links, url)
 
                 all_links = []
                 for s in server_links:
-                    all_links.extend(extract_final_links(s))
+                    extracted = await asyncio.to_thread(extract_final_links, s)
+                    all_links.extend(extracted)
 
                 final_links = clean_links(all_links)
                 if final_links:
@@ -336,6 +335,7 @@ async def monitor():
             logger.exception("Error in monitor: %s", e)
 
         await asyncio.sleep(CHECK_INTERVAL)
+
 
 async def main():
     await app.start()

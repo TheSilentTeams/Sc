@@ -9,16 +9,9 @@ from urllib.parse import urljoin
 from fastapi import FastAPI
 import threading
 import uvicorn
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-import undetected_chromedriver as uc
 from pyrogram import idle
 from pyrogram import Client, filters, utils
+from playwright.async_api import async_playwright
 import nest_asyncio
 nest_asyncio.apply()
 
@@ -132,42 +125,37 @@ def get_latest_movie_links():
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
 
-def bypass_hubcloud(url):
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--blink-settings=imagesEnabled=false")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-
-    driver = webdriver.Chrome(options=options)
-    logger.info(f"🌐 Bypassing HubCloud: {url}")
+async def bypass_hubcloud(url):
     links = []
 
     try:
-        driver.get(url)
-        wait = WebDriverWait(driver, 15)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            page = await context.new_page()
 
-        button = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//a[contains(text(), 'Generate Direct Download Link')]")))
-        button.click()
+            logger.info(f"🌐 Bypassing HubCloud (Playwright): {url}")
+            await page.goto(url, timeout=20000)
 
-        wait.until(lambda d: "hubcloud" not in d.current_url)
-        wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
+            # Click the "Generate Direct Download Link" button
+            await page.click("text='Generate Direct Download Link'", timeout=15000)
 
-        for a in driver.find_elements(By.TAG_NAME, "a"):
-            href = a.get_attribute("href")
-            if href and ("download" in (a.text or "").lower() or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
-                links.append(href.strip())
+            # Wait until redirected away from HubCloud
+            await page.wait_for_url(lambda u: "hubcloud" not in u, timeout=15000)
+
+            # Wait for all links to be present
+            anchors = await page.query_selector_all("a")
+            for a in anchors:
+                href = await a.get_attribute("href")
+                text = await a.inner_text()
+                if href and ("download" in text.lower() or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
+                    links.append(href.strip())
+
+            logger.info(f"✅ HubCloud bypassed (Playwright): {len(links)} links found")
 
     except Exception as e:
-        logger.warning(f"HubCloud bypass failed: {e}")
-    finally:
-        driver.quit()
+        logger.warning(f"❌ Playwright HubCloud bypass failed: {e}")
 
-    logger.info(f"✅ HubCloud bypassed: {len(links)} links found")
     return links
 
 
@@ -239,7 +227,7 @@ async def send_to_channel(title, links):
         msg += f"🔗 **{label}** - {link}\n"
 
         if "hubcloud" in link:
-            scraped = await asyncio.to_thread(bypass_hubcloud, link)
+            scraped = await bypass_hubcloud(link)
             if scraped:
                 hubcloud_scraped.extend(scraped)
 
@@ -294,7 +282,7 @@ async def hubcloud_bypass(client, message):
 
     try:
         loop = asyncio.get_running_loop()
-        links = await asyncio.to_thread(bypass_hubcloud, url)
+        links = await bypass_hubcloud(url)
 
         if not links:
             await status_msg.edit_text("❌ Failed to bypass the HubCloud link.")

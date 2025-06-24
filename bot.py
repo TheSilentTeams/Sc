@@ -14,6 +14,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 import undetected_chromedriver as uc
 from pyrogram import idle
 from pyrogram import Client, filters, utils
@@ -131,22 +133,30 @@ def get_latest_movie_links():
     return unique
 
 def bypass_hubcloud(url):
+    options = Options()
+    options.add_argument("--headless=chrome")  # Use classic headless
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     logger.info(f"🌐 Bypassing HubCloud: {url}")
     links = []
 
-    options = uc.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
     try:
-        driver = uc.Chrome(options=options)
         driver.get(url)
-        WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Generate Direct Download Link')]"))
-        ).click()
+        wait = WebDriverWait(driver, 15)
 
-        WebDriverWait(driver, 15).until(lambda d: "hubcloud" not in d.current_url)
+        button = wait.until(EC.element_to_be_clickable(
+            (By.XPATH, "//a[contains(text(), 'Generate Direct Download Link')]")))
+        button.click()
+
+        wait.until(lambda d: "hubcloud" not in d.current_url)
+        wait.until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
+
         for a in driver.find_elements(By.TAG_NAME, "a"):
             href = a.get_attribute("href")
             if href and ("download" in (a.text or "").lower() or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
@@ -158,7 +168,6 @@ def bypass_hubcloud(url):
 
     logger.info(f"✅ HubCloud bypassed: {len(links)} links found")
     return links
-
 
 def get_server_links(movie_url):
     logger.debug("Fetching movie page: %s", movie_url)

@@ -16,6 +16,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from pyrogram import idle
 from pyrogram import Client, filters, utils
+import nest_asyncio
+nest_asyncio.apply()
 
 # --- Config ---
 API_ID     = int(os.environ.get("API_ID", "25833520"))
@@ -337,13 +339,23 @@ async def monitor():
         await asyncio.sleep(CHECK_INTERVAL)
 
 
+async def run_web_async():
+    import uvicorn
+    config = uvicorn.Config(web_app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
+
 async def main():
     await app.start()
-    asyncio.create_task(monitor())
-    await idle()
+    asyncio.create_task(monitor())  # starts the monitor loop
+    await idle()  # keeps the bot running
     await app.stop()
 
-if __name__ == "__main__":
-    threading.Thread(target=run_web, daemon=True).start()
-    asyncio.run(main())
+async def run_all():
+    await asyncio.gather(
+        run_web_async(),
+        main()
+    )
 
+if __name__ == "__main__":
+    asyncio.run(run_all())

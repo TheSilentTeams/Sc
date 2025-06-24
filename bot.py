@@ -142,7 +142,9 @@ def bypass_hubcloud(url):
     options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_argument("--disable-blink-features=AutomationControlled")
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    options.binary_location = "/usr/bin/chromium"
+    driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
+
     logger.info(f"🌐 Bypassing HubCloud: {url}")
     links = []
 

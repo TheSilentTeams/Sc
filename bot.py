@@ -292,14 +292,14 @@ async def hubcloud_bypass(client, message):
         links = await asyncio.to_thread(bypass_hubcloud, url)
 
         if not links:
-            await status_msg.edit("❌ Failed to bypass the HubCloud link.")
+            await status_msg.edit_text("❌ Failed to bypass the HubCloud link.")
             return
 
         reply = "\n".join(f"• {l}" for l in links)
-        await status_msg.edit(f"🚀 **Bypassed Links:**\n{reply}")
+        await status_msg.edit_text(f"🚀 **Bypassed Links:**\n{reply}")
     except Exception as e:
         logger.error(f"Error in /hub: {e}")
-        await status_msg.edit(f"❌ Error: {e}")
+        await status_msg.edit_text(f"❌ Error: {e}")
 
 
 
@@ -338,10 +338,8 @@ async def monitor():
         await asyncio.sleep(CHECK_INTERVAL)
 
 # --- Run ---
-if __name__ == "__main__":
-    # 1) Launch your FastAPI health-check in the background
-    threading.Thread(target=run_web, daemon=True).start()
-
-    # 2) Start Pyrogram, schedule monitor(), then idle forever
-    app.run(monitor)
-
+ # --- Run ---
+ if __name__ == "__main__":
+     # 1) Launch your FastAPI health-check in the background
+     threading.Thread(target=run_web, daemon=True).start()
+     app.run(monitor())      # <-- call the coroutine, not the function

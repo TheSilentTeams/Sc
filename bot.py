@@ -133,8 +133,10 @@ def get_latest_movie_links():
     return unique
 
 def bypass_hubcloud(url):
+    from selenium.webdriver.chrome.service import Service
+
     options = Options()
-    options.add_argument("--headless=chrome")  # Use classic headless
+    options.add_argument("--headless=new")  # Use new headless mode
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-gpu")
@@ -142,9 +144,12 @@ def bypass_hubcloud(url):
     options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_argument("--disable-blink-features=AutomationControlled")
 
+    # IMPORTANT: set binary location if you're on Render or custom path
     options.binary_location = "/usr/bin/chromium"
-    driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
 
+    service = Service("/usr/bin/chromedriver")  # use full path to chromedriver if needed
+
+    driver = webdriver.Chrome(service=service, options=options)
     logger.info(f"🌐 Bypassing HubCloud: {url}")
     links = []
 
@@ -170,6 +175,7 @@ def bypass_hubcloud(url):
 
     logger.info(f"✅ HubCloud bypassed: {len(links)} links found")
     return links
+
 
 def get_server_links(movie_url):
     logger.debug("Fetching movie page: %s", movie_url)

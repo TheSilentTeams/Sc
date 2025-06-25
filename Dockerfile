@@ -41,4 +41,4 @@ COPY . .
 
 
 # Run your app (adjust this as needed)
-CMD ["python", "app.py"]
+CMD ["python", "bot.py"]

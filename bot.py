@@ -137,18 +137,30 @@ async def bypass_hubcloud(url):
             logger.info(f"🌐 Bypassing HubCloud (Playwright): {url}")
             await page.goto(url, timeout=45000)
 
-            # Click the "Generate Direct Download Link" button
-            await page.click("text='Generate Direct Download Link'", timeout=45000)
+            # Explicit wait for the button (robust like Selenium's EC)
+            try:
+                await page.wait_for_selector("a:has-text('Generate Direct Download Link')", timeout=15000)
+                await page.locator("a:has-text('Generate Direct Download Link')").click()
+            except Exception as e:
+                logger.warning(f"❌ Button not found or not clickable: {e}")
+                return []
 
-            # Wait until redirected away from HubCloud
-            await page.wait_for_url(lambda u: "hubcloud" not in u, timeout=45000)
+            # Wait until URL changes away from hubcloud
+            try:
+                await page.wait_for_function("!window.location.href.includes('hubcloud')", timeout=15000)
+            except Exception as e:
+                logger.warning(f"❌ URL didn't redirect in time: {e}")
+                return []
 
-            # Wait for all links to be present
+            await page.wait_for_load_state("load")
+
+            # Extract anchor links
             anchors = await page.query_selector_all("a")
             for a in anchors:
                 href = await a.get_attribute("href")
-                text = await a.inner_text()
-                if href and ("download" in text.lower() or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
+                text = (await a.inner_text() or "").lower()
+
+                if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
                     links.append(href.strip())
 
             logger.info(f"✅ HubCloud bypassed (Playwright): {len(links)} links found")

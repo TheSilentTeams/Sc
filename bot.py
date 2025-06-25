@@ -14,6 +14,9 @@ from pyrogram import Client, filters, utils
 from playwright.async_api import async_playwright
 import nest_asyncio
 nest_asyncio.apply()
+import tempfile
+import time
+from pyrogram.errors import FloodWait
 
 # --- Config ---
 API_ID     = int(os.environ.get("API_ID", "25833520"))
@@ -125,13 +128,14 @@ def get_latest_movie_links():
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
 
-import tempfile
-import time
-from pyrogram.errors import FloodWait
 
-async def bypass_hubcloud(url):
+
+async def bypass_hubcloud(raw_url):
     links = []
     debug_files = []
+
+    # Fix broken HubCloud URLs like "...Views:"
+    url = raw_url.split("Views")[0].strip()
 
     try:
         async with async_playwright() as p:
@@ -141,61 +145,43 @@ async def bypass_hubcloud(url):
 
             logger.info(f"🌐 [Playwright] Visiting HubCloud URL: {url}")
             await page.goto(url, timeout=45000)
+            await page.wait_for_load_state("domcontentloaded")
 
-            # Optional wait for main content
-            await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            # Screenshot + HTML for debug
+            ts = str(int(time.time()))
+            ss_path = f"/tmp/hubcloud_debug_{ts}.png"
+            html_path = f"/tmp/hubcloud_debug_{ts}.html"
 
-            # Screenshot before interaction
-            debug_ss_path = f"/tmp/hubcloud_debug_{int(time.time())}.png"
-            await page.screenshot(path=debug_ss_path)
-            debug_files.append(debug_ss_path)
+            await page.screenshot(path=ss_path)
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(await page.content())
 
-            # HTML content dump
-            debug_html_path = f"/tmp/hubcloud_debug_{int(time.time())}.html"
-            html = await page.content()
-            with open(debug_html_path, "w", encoding="utf-8") as f:
-                f.write(html)
-            debug_files.append(debug_html_path)
+            debug_files.extend([ss_path, html_path])
 
-            # Try to find any button or anchor with "Generate"
-            locator = page.locator("a, button").filter(has_text="Generate")
+            # Try to click a "Generate" button
+            locator = page.locator("a, button").filter(has_text=re.compile("generate", re.I))
             count = await locator.count()
+
             if count == 0:
                 logger.warning("❌ No 'Generate' buttons found on page")
                 raise Exception("No 'Generate' link/button found")
 
             logger.debug(f"✅ Found {count} generate button(s), clicking first one")
-            try:
-                async with context.expect_page(timeout=15000) as new_page_info:
-                    await locator.nth(0).click()
-                new_page = await new_page_info.value
-                await new_page.wait_for_load_state("domcontentloaded")
+            await locator.nth(0).click()
 
-                # Extract links from new page
-                anchors = await new_page.query_selector_all("a")
-                for a in anchors:
-                    href = await a.get_attribute("href")
-                    text = (await a.inner_text() or "").lower()
+            # Wait for the page to fully reload or update
+            await page.wait_for_load_state("load", timeout=15000)
 
-                    if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
-                        links.append(href.strip())
+            # Extract all valid links
+            anchors = await page.query_selector_all("a")
+            for a in anchors:
+                href = await a.get_attribute("href")
+                text = (await a.inner_text() or "").lower()
 
-                logger.info(f"✅ New page loaded and {len(links)} links extracted")
+                if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
+                    links.append(href.strip())
 
-            except Exception as e:
-                logger.warning(f"⚠️ No popup/new page detected: {e}")
-                # Try fallback in same page
-                await page.wait_for_load_state("load", timeout=10000)
-
-                anchors = await page.query_selector_all("a")
-                for a in anchors:
-                    href = await a.get_attribute("href")
-                    text = (await a.inner_text() or "").lower()
-
-                    if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
-                        links.append(href.strip())
-
-                logger.info(f"✅ Fallback links extracted from same page: {len(links)}")
+            logger.info(f"✅ Links extracted successfully via same-page method: {len(links)}")
 
     except Exception as e:
         logger.error(f"❌ Playwright bypass failed for {url}: {e}")
@@ -209,11 +195,11 @@ async def notify_debug_failure(url, error, files):
         caption = f"❌ **HubCloud Bypass Failed**\nURL: `{url}`\nError: `{error}`"
         await app.send_message(OWNER_ID, caption)
         for path in files:
-            ext = os.path.splitext(path)[1].lower()
-            if ext == ".png":
-                await app.send_photo(OWNER_ID, path)
-            else:
-                await app.send_document(OWNER_ID, path)
+            if os.path.exists(path):
+                if path.endswith(".png"):
+                    await app.send_photo(OWNER_ID, path)
+                else:
+                    await app.send_document(OWNER_ID, path)
     except FloodWait as fw:
         logger.warning(f"Flood wait: sleeping for {fw.value} seconds")
         await asyncio.sleep(fw.value)

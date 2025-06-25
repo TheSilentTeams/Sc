@@ -125,8 +125,13 @@ def get_latest_movie_links():
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
 
+import tempfile
+import time
+from pyrogram.errors import FloodWait
+
 async def bypass_hubcloud(url):
     links = []
+    debug_files = []
 
     try:
         async with async_playwright() as p:
@@ -134,41 +139,88 @@ async def bypass_hubcloud(url):
             context = await browser.new_context()
             page = await context.new_page()
 
-            logger.info(f"🌐 Bypassing HubCloud (Playwright): {url}")
+            logger.info(f"🌐 [Playwright] Visiting HubCloud URL: {url}")
             await page.goto(url, timeout=45000)
 
-            # Explicit wait for the button (robust like Selenium's EC)
+            # Optional wait for main content
+            await page.wait_for_load_state("domcontentloaded", timeout=10000)
+
+            # Screenshot before interaction
+            debug_ss_path = f"/tmp/hubcloud_debug_{int(time.time())}.png"
+            await page.screenshot(path=debug_ss_path)
+            debug_files.append(debug_ss_path)
+
+            # HTML content dump
+            debug_html_path = f"/tmp/hubcloud_debug_{int(time.time())}.html"
+            html = await page.content()
+            with open(debug_html_path, "w", encoding="utf-8") as f:
+                f.write(html)
+            debug_files.append(debug_html_path)
+
+            # Try to find any button or anchor with "Generate"
+            locator = page.locator("a, button").filter(has_text="Generate")
+            count = await locator.count()
+            if count == 0:
+                logger.warning("❌ No 'Generate' buttons found on page")
+                raise Exception("No 'Generate' link/button found")
+
+            logger.debug(f"✅ Found {count} generate button(s), clicking first one")
             try:
-                await page.wait_for_selector("a:has-text('Generate Direct Download Link')", timeout=15000)
-                await page.locator("a:has-text('Generate Direct Download Link')").click()
+                async with context.expect_page(timeout=15000) as new_page_info:
+                    await locator.nth(0).click()
+                new_page = await new_page_info.value
+                await new_page.wait_for_load_state("domcontentloaded")
+
+                # Extract links from new page
+                anchors = await new_page.query_selector_all("a")
+                for a in anchors:
+                    href = await a.get_attribute("href")
+                    text = (await a.inner_text() or "").lower()
+
+                    if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
+                        links.append(href.strip())
+
+                logger.info(f"✅ New page loaded and {len(links)} links extracted")
+
             except Exception as e:
-                logger.warning(f"❌ Button not found or not clickable: {e}")
-                return []
+                logger.warning(f"⚠️ No popup/new page detected: {e}")
+                # Try fallback in same page
+                await page.wait_for_load_state("load", timeout=10000)
 
-            # Wait until URL changes away from hubcloud
-            try:
-                await page.wait_for_function("!window.location.href.includes('hubcloud')", timeout=15000)
-            except Exception as e:
-                logger.warning(f"❌ URL didn't redirect in time: {e}")
-                return []
+                anchors = await page.query_selector_all("a")
+                for a in anchors:
+                    href = await a.get_attribute("href")
+                    text = (await a.inner_text() or "").lower()
 
-            await page.wait_for_load_state("load")
+                    if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
+                        links.append(href.strip())
 
-            # Extract anchor links
-            anchors = await page.query_selector_all("a")
-            for a in anchors:
-                href = await a.get_attribute("href")
-                text = (await a.inner_text() or "").lower()
-
-                if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
-                    links.append(href.strip())
-
-            logger.info(f"✅ HubCloud bypassed (Playwright): {len(links)} links found")
+                logger.info(f"✅ Fallback links extracted from same page: {len(links)}")
 
     except Exception as e:
-        logger.warning(f"❌ Playwright HubCloud bypass failed: {e}")
+        logger.error(f"❌ Playwright bypass failed for {url}: {e}")
+        await notify_debug_failure(url, e, debug_files)
 
-    return links
+    return sorted(set(links))
+
+
+async def notify_debug_failure(url, error, files):
+    try:
+        caption = f"❌ **HubCloud Bypass Failed**\nURL: `{url}`\nError: `{error}`"
+        await app.send_message(OWNER_ID, caption)
+        for path in files:
+            ext = os.path.splitext(path)[1].lower()
+            if ext == ".png":
+                await app.send_photo(OWNER_ID, path)
+            else:
+                await app.send_document(OWNER_ID, path)
+    except FloodWait as fw:
+        logger.warning(f"Flood wait: sleeping for {fw.value} seconds")
+        await asyncio.sleep(fw.value)
+        await notify_debug_failure(url, error, files)
+    except Exception as e:
+        logger.error(f"Failed to send debug files to OWNER_ID: {e}")
+
 
 
 def get_server_links(movie_url):

@@ -256,6 +256,7 @@ def get_title(movie_url):
         logger.error("Failed to get title from %s: %s", movie_url, e)
         return movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
 
+
 async def send_to_channel(title, links):
     msg = f"🎬 `{title}`\n\n🎯 **Links:**\n"
     hubcloud_scraped = []
@@ -278,9 +279,11 @@ async def send_to_channel(title, links):
             label = domain.split(".")[0][:10]
             msg += f"• [{label}]({link})\n"
 
-    msg += "\n🌐 Scraped from SkyMoviesHD (https://telegram.me/Silent_Bots)"
+    # Footer in quote block
+    msg += "\n> 🌐 Scraped from SkyMoviesHD (https://telegram.me/Silent_Bots)"
 
     await app.send_message(CHANNEL_ID, msg, disable_web_page_preview=True)
+
 
 @app.on_message(filters.command("up") & filters.user(OWNER_ID))
 async def update_url(client, message):

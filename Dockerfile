@@ -37,8 +37,5 @@ RUN python -m playwright install --with-deps
 # Copy rest of the app
 COPY . .
 
-# Expose port (if running a web app)
-
-
 # Run your app (adjust this as needed)
 CMD ["python", "bot.py"]

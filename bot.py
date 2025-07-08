@@ -256,7 +256,6 @@ def get_title(movie_url):
         logger.error("Failed to get title from %s: %s", movie_url, e)
         return movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
 
-import re
 
 async def send_to_channel(title, links):
     msg = f"🎬 `{title}`\n\n🎯 **Links:**\n"

@@ -129,12 +129,10 @@ def get_latest_movie_links():
     return unique
 
 
-
-async def bypass_hubcloud(raw_url):
+async def bypass_hubcloud(raw_url: str) -> list[str]:
     links = []
-    debug_files = []
 
-    # Fix broken HubCloud URLs like "...Views:"
+    # Clean up broken HubCloud URLs
     url = raw_url.split("Views")[0].strip()
 
     try:
@@ -143,49 +141,43 @@ async def bypass_hubcloud(raw_url):
             context = await browser.new_context()
             page = await context.new_page()
 
-            logger.info(f"🌐 [Playwright] Visiting HubCloud URL: {url}")
             await page.goto(url, timeout=45000)
             await page.wait_for_load_state("domcontentloaded")
 
-            # Screenshot + HTML for debug
-            ts = str(int(time.time()))
-            ss_path = f"/tmp/hubcloud_debug_{ts}.png"
-            html_path = f"/tmp/hubcloud_debug_{ts}.html"
-
-            await page.screenshot(path=ss_path)
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(await page.content())
-
-            debug_files.extend([ss_path, html_path])
-
-            # Try to click a "Generate" button
+            # Click the first "Generate" button
             locator = page.locator("a, button").filter(has_text=re.compile("generate", re.I))
-            count = await locator.count()
+            if await locator.count() == 0:
+                return []
 
-            if count == 0:
-                logger.warning("❌ No 'Generate' buttons found on page")
-                raise Exception("No 'Generate' link/button found")
-
-            logger.debug(f"✅ Found {count} generate button(s), clicking first one")
             await locator.nth(0).click()
-
-            # Wait for the page to fully reload or update
             await page.wait_for_load_state("load", timeout=15000)
 
-            # Extract all valid links
+            # Look for a button labeled "Generate Direct Download Link"
+            final_btn = page.locator("a, button").filter(has_text=re.compile("Generate Direct Download Link", re.I))
+
+            if await final_btn.count() == 0:
+                return []
+
+            final_href = await final_btn.nth(0).get_attribute("href")
+
+            # If it's a link, go to it. Otherwise, click it.
+            if final_href:
+                await page.goto(final_href, timeout=45000)
+                await page.wait_for_load_state("domcontentloaded")
+            else:
+                await final_btn.nth(0).click()
+                await page.wait_for_load_state("load", timeout=30000)
+
+            # Extract final download links
             anchors = await page.query_selector_all("a")
             for a in anchors:
                 href = await a.get_attribute("href")
                 text = (await a.inner_text() or "").lower()
-
                 if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
                     links.append(href.strip())
 
-            logger.info(f"✅ Links extracted successfully via same-page method: {len(links)}")
-
-    except Exception as e:
-        logger.error(f"❌ Playwright bypass failed for {url}: {e}")
-        await notify_debug_failure(url, e, debug_files)
+    except:
+        pass  # Fail silently for bot use
 
     return sorted(set(links))
 

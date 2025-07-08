@@ -257,16 +257,14 @@ def get_title(movie_url):
         return movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
 
 async def send_to_channel(title, links):
-    logger.info("Preparing to send: %s with %d links", title, len(links))
-
-    msg = f"🎬 **{title}**\n\n🎯 **Links:**\n"
+    msg = f"🎬 `{title}`\n\n🎯 **Links:**\n"
     hubcloud_scraped = []
 
     for link in links:
         domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
         label = domain.split(".")[0][:10]
 
-        msg += f"🔗 **{label}** - {link}\n"
+        msg += f"🔗 [{label}]({link})\n"
 
         if "hubcloud" in link:
             scraped = await bypass_hubcloud(link)
@@ -276,9 +274,13 @@ async def send_to_channel(title, links):
     if hubcloud_scraped:
         msg += "\n🚀 **HubCloud Scraped Links** 🚀\n"
         for link in hubcloud_scraped:
-            msg += f"• {link}\n"
+            domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
+            label = domain.split(".")[0][:10]
+            msg += f"• [{label}]({link})\n"
 
-    await app.send_message(CHANNEL_ID, msg)
+    msg += "\n🌐 Scraped from SkyMoviesHD (https://telegram.me/Silent_Bots)"
+
+    await app.send_message(CHANNEL_ID, msg, disable_web_page_preview=True)
 
 @app.on_message(filters.command("up") & filters.user(OWNER_ID))
 async def update_url(client, message):

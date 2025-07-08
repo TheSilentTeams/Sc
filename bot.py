@@ -256,17 +256,19 @@ def get_title(movie_url):
         logger.error("Failed to get title from %s: %s", movie_url, e)
         return movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
 
-
+def escape_md(text: str) -> str:
+    """Escape MarkdownV2 special characters."""
+    return re.sub(r'([_\*\[\]\(\)~`>#+\-=|{}.!\\])', r'\\\1', text)
 
 async def send_to_channel(title, links):
-    msg = f"🎬 `{title}`\n\n🎯 **Links:**\n"
+    msg = f"🎬 `{escape_md(title)}`\n\n🎯 *Links:*\n"
     hubcloud_scraped = []
 
     for link in links:
         domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
-        label = domain.split(".")[0][:10]
-
-        msg += f"🔗 [{label}]({link})\n"
+        label = escape_md(domain.split(".")[0][:10])
+        link_escaped = escape_md(link)
+        msg += f"🔗 [{label}]({link_escaped})\n"
 
         if "hubcloud" in link:
             scraped = await bypass_hubcloud(link)
@@ -274,16 +276,23 @@ async def send_to_channel(title, links):
                 hubcloud_scraped.extend(scraped)
 
     if hubcloud_scraped:
-        msg += "\n🚀 **HubCloud Scraped Links** 🚀\n"
+        msg += "\n🚀 *HubCloud Scraped Links* 🚀\n"
         for link in hubcloud_scraped:
             domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
-            label = domain.split(".")[0][:10]
-            msg += f"• [{label}]({link})\n"
+            label = escape_md(domain.split(".")[0][:10])
+            link_escaped = escape_md(link)
+            msg += f"• [{label}]({link_escaped})\n"
 
-    # Footer in quote block
-    msg += "\n> 🌐 Scraped from SkyMoviesHD (https://telegram.me/Silent_Bots)"
+    # Add MarkdownV2 blockquote
+    footer = "> 🌐 Scraped from [SkyMoviesHD](https://telegram.me/Silent_Bots)"
+    msg += f"\n{footer}"
 
-    await app.send_message(CHANNEL_ID, msg, disable_web_page_preview=True)
+    await app.send_message(
+        CHANNEL_ID,
+        msg,
+        parse_mode="MarkdownV2",
+        disable_web_page_preview=True
+    )
 
 
 

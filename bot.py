@@ -280,7 +280,7 @@ async def send_to_channel(title, links):
             msg += f"• [{label}]({link})\n"
 
     # Footer in quote block
-    msg += "\n>> 🌐 Scraped from SkyMoviesHD (https://telegram.me/Silent_Bots)"
+    msg += "\n🌐 Scraped from [SkyMoviesHD](https://telegram.me/Silent_Bots)"
 
     await app.send_message(CHANNEL_ID, msg, disable_web_page_preview=True)
 

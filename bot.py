@@ -17,6 +17,7 @@ nest_asyncio.apply()
 import tempfile
 import time
 from pyrogram.errors import FloodWait
+from typing import Dict, List
 
 # --- Config ---
 API_ID     = int(os.environ.get("API_ID", "25833520"))
@@ -128,11 +129,9 @@ def get_latest_movie_links():
     logger.info("Found %d latest updated movie links", len(unique))
     return unique
 
-
-async def bypass_hubcloud(raw_url: str) -> list[str]:
-    links = []
-
-    # Clean up broken HubCloud URLs
+async def bypass_hubcloud(raw_url: str) -> Dict[str, str]:
+    collected_links = {}
+    final_links = {}
     url = raw_url.split("Views")[0].strip()
 
     try:
@@ -141,45 +140,90 @@ async def bypass_hubcloud(raw_url: str) -> list[str]:
             context = await browser.new_context()
             page = await context.new_page()
 
+            print(f"🌐 Visiting HubCloud URL: {url}")
             await page.goto(url, timeout=45000)
             await page.wait_for_load_state("domcontentloaded")
 
-            # Click the first "Generate" button
-            locator = page.locator("a, button").filter(has_text=re.compile("generate", re.I))
-            if await locator.count() == 0:
-                return []
+            # Click "Generate" button
+            generate_btn = page.locator("a, button").filter(has_text=re.compile("generate", re.I))
+            if await generate_btn.count() == 0:
+                print("❌ No 'Generate' button found.")
+                return {}
 
-            await locator.nth(0).click()
-            await page.wait_for_load_state("load", timeout=15000)
+            print("⚙️ Clicking 'Generate' button...")
+            await generate_btn.nth(0).click()
+            await page.wait_for_timeout(2000)
 
-            # Look for a button labeled "Generate Direct Download Link"
-            final_btn = page.locator("a, button").filter(has_text=re.compile("Generate Direct Download Link", re.I))
+            # Click "Generate Direct Download Link"
+            direct_btn = page.locator("a, button").filter(
+                has_text=re.compile("Generate Direct Download Link", re.I)
+            )
+            if await direct_btn.count() == 0:
+                print("❌ 'Generate Direct Download Link' not found.")
+                return {}
 
-            if await final_btn.count() == 0:
-                return []
-
-            final_href = await final_btn.nth(0).get_attribute("href")
-
-            # If it's a link, go to it. Otherwise, click it.
-            if final_href:
-                await page.goto(final_href, timeout=45000)
-                await page.wait_for_load_state("domcontentloaded")
+            gamerxyt_url = await direct_btn.nth(0).get_attribute("href")
+            if gamerxyt_url:
+                print(f"➡️ Visiting GamerXyt link: {gamerxyt_url}")
+                await page.goto(gamerxyt_url, timeout=45000)
             else:
-                await final_btn.nth(0).click()
-                await page.wait_for_load_state("load", timeout=30000)
+                print("➡️ Clicking fallback Direct Download button...")
+                await direct_btn.nth(0).click()
 
-            # Extract final download links
-            anchors = await page.query_selector_all("a")
-            for a in anchors:
-                href = await a.get_attribute("href")
-                text = (await a.inner_text() or "").lower()
-                if href and ("download" in text or href.endswith((".mp4", ".mkv", ".zip", ".rar"))):
-                    links.append(href.strip())
+            await page.wait_for_load_state("domcontentloaded")
 
-    except:
-        pass  # Fail silently for bot use
+            # Filter relevant download buttons (not junk)
+            print("🔍 Scanning for download buttons...")
+            buttons = await page.locator("a, button").all()
 
-    return sorted(set(links))
+            for btn in buttons:
+                text = (await btn.inner_text() or "").strip()
+                href = await btn.get_attribute("href")
+
+                # Avoid noise buttons
+                if not href or not text:
+                    continue
+                if re.search(r'vpn|idm|ida|telegram|login|how\s?\?|tutorial', text, re.I):
+                    continue
+                if not re.search(r'download', text, re.I):
+                    continue
+
+                collected_links[text] = href
+
+            # Now handle 10Gbps link visit
+            for text, href in collected_links.items():
+                if "10gbps" in text.lower():
+                    print(f"🕵️ Visiting intermediate link for '{text}'...")
+                    sub_page = await context.new_page()
+                    try:
+                        await sub_page.goto(href, timeout=45000)
+                        await sub_page.wait_for_load_state("domcontentloaded")
+
+                        print("🔬 [10Gbps] Inspecting buttons and DOM inside...")
+                        sub_buttons = await sub_page.locator("a, button").all()
+
+                        for sb in sub_buttons:
+                            label = (await sb.inner_text() or "").strip()
+                            final_href = await sb.get_attribute("href")
+                            print(f"    ├── Button: {label} → {final_href}")
+                            if final_href and "download" in label.lower():
+                                print(f"✅ Direct download link found: {final_href}")
+                                final_links[text] = final_href
+                                break
+                        else:
+                            print("⚠️ No clear download button found, keeping original.")
+                            final_links[text] = href
+                    except Exception as err:
+                        print(f"❌ Error in 10Gbps page: {err}")
+                        final_links[text] = href
+                    finally:
+                        await sub_page.close()
+                else:
+                    final_links[text] = href
+
+    except Exception as e:
+        print(f"❌ Error during extraction: {e}")
+    return final_links
 
 
 async def notify_debug_failure(url, error, files):
@@ -265,7 +309,7 @@ async def send_to_channel(title, links):
         domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
         label = domain.split(".")[0][:10]
 
-        msg += f"🔗 [{label}]({link})\n"
+        msg += f"[{label}]({link})\n"
 
         if "hubcloud" in link:
             scraped = await bypass_hubcloud(link)
@@ -274,21 +318,25 @@ async def send_to_channel(title, links):
 
     if hubcloud_scraped:
         msg += "\n🚀 **HubCloud Scraped Links** 🚀\n"
-        for link in hubcloud_scraped:
-            domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
-            label = domain.split(".")[0][:10]
-            msg += f"• [{label}]({link})\n"
+        for item in hubcloud_scraped:
+            # Support both raw links or tuples (label, link)
+            if isinstance(item, tuple) and len(item) == 2:
+                label, link = item
+                msg += f"[{label}]({link})\n"
+            else:
+                domain = re.sub(r"^https?://(www\.)?", "", item).split("/")[0]
+                label = domain.split(".")[0][:10]
+                msg += f"[{label}]({item})\n"
 
-    # Footer in quote block
+    # Footer
     msg += "\n> 🌐 Scraped from [SkyMoviesHD](https://telegram.me/Silent_Bots)"
 
     await app.send_message(
         CHANNEL_ID,
         msg,
-        parse_mode="MarkdownV2",
+        parse_mode="Markdown",
         disable_web_page_preview=True
     )
-
 
 
 @app.on_message(filters.command("up") & filters.user(OWNER_ID))

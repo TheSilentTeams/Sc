@@ -38,4 +38,4 @@ RUN python -m playwright install --with-deps
 COPY . .
 
 # Run your app (adjust this as needed)
-CMD ["python", "bot.py"]
+CMD ["python", "main.py"]

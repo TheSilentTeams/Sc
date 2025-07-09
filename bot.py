@@ -329,12 +329,11 @@ async def send_to_channel(title, links):
                 msg += f"[{label}]({item})\n"
 
     # Footer
-    msg += "\n> 🌐 Scraped from [SkyMoviesHD](https://telegram.me/Silent_Bots)"
+    msg += "\n🌐 **Scraped from [SkyMoviesHD](https://telegram.me/Silent_Bots)**"
 
     await app.send_message(
         CHANNEL_ID,
         msg,
-        parse_mode="Markdown",
         disable_web_page_preview=True
     )
 

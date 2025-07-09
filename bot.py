@@ -330,7 +330,7 @@ async def send_to_channel(title: str, links: list[str]):
     await app.send_message(
         CHANNEL_ID,
         msg,
-        parse_mode="html",
+        parse_mode=ParseMode.HTML,
         disable_web_page_preview=True
     )
 

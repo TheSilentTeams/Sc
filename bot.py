@@ -23,7 +23,7 @@ from typing import Dict, List
 # --- Config ---
 API_ID     = int(os.environ.get("API_ID", "25833520"))
 API_HASH   = os.environ.get("API_HASH", "7d012a6cbfabc2d0436d7a09d8362af7")
-BOT_TOKEN  = os.environ.get("BOT_TOKEN", "7422084781:AAEyqYJBAepuCeXgnZcNVxa_Z7aMDcIiK1s")
+BOT_TOKEN  = os.environ.get("BOT_TOKEN", "7422084781:AAFzS42RMRgdDwg4yZEYk0mmkw5em-c37_c")
 OWNER_ID   = int(os.environ.get("OWNER_ID", "921365334"))
 CHANNEL_ID = -1002739509521
 

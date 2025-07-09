@@ -11,6 +11,7 @@ import threading
 import uvicorn
 from pyrogram import idle
 from pyrogram import Client, filters, utils
+from pyrogram.enums import ParseMode
 from playwright.async_api import async_playwright
 import nest_asyncio
 nest_asyncio.apply()

@@ -438,7 +438,7 @@ async def main():
     await idle()  # keeps the bot running
     await app.stop()
 
-async def run_all():
+async def run_skymovies():
     await asyncio.gather(
         run_web_async(),
         main()

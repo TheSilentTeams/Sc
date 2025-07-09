@@ -301,39 +301,36 @@ def get_title(movie_url):
         return movie_url.split("/")[-1].replace("-", " ").replace(".html", "").title()
 
 
-async def send_to_channel(title, links):
-    msg = f"🎬 `{title}`\n\n🎯 **Links:**\n"
+import re
+
+async def send_to_channel(title: str, links: list[str]):
+    msg = f"<b>🎬 {title}</b>\n\n<b>🎯 Links:</b>\n"
     hubcloud_scraped = []
 
     for link in links:
         domain = re.sub(r"^https?://(www\.)?", "", link).split("/")[0]
         label = domain.split(".")[0][:10]
-
-        msg += f"[{label}]({link})\n"
+        msg += f"• <a href=\"{link}\">{label}</a>\n"
 
         if "hubcloud" in link:
             scraped = await bypass_hubcloud(link)
             if scraped:
-                hubcloud_scraped.extend(scraped)
+                hubcloud_scraped.append(scraped)
 
     if hubcloud_scraped:
-        msg += "\n🚀 **HubCloud Scraped Links** 🚀\n"
-        for item in hubcloud_scraped:
-            # Support both raw links or tuples (label, link)
-            if isinstance(item, tuple) and len(item) == 2:
-                label, link = item
-                msg += f"[{label}]({link})\n"
-            else:
-                domain = re.sub(r"^https?://(www\.)?", "", item).split("/")[0]
-                label = domain.split(".")[0][:10]
-                msg += f"[{label}]({item})\n"
+        msg += "\n🚀 <b>HubCloud Scraped Links</b> 🚀\n"
+        for scraped_dict in hubcloud_scraped:
+            for text, url in scraped_dict.items():
+                safe_text = re.sub(r"[<>]", "", text.strip())
+                msg += f"• <a href=\"{url}\">{safe_text}</a>\n"
 
-    # Footer
-    msg += "\n🌐 **Scraped from [SkyMoviesHD](https://telegram.me/Silent_Bots)**"
+    # Footer with blockquote-style
+    msg += "\n<blockquote>🌐 Scraped from <a href=\"https://telegram.me/Silent_Bots\">SkyMoviesHD</a></blockquote>"
 
     await app.send_message(
         CHANNEL_ID,
         msg,
+        parse_mode="HTML",
         disable_web_page_preview=True
     )
 
